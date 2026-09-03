@@ -1,8 +1,8 @@
 # MEDUZ TRADING JOURNAL — Telegram Bot
 
 Professional crypto futures trading journal bot. Trade yaratish, pending → active → closed oqimi,
-kunlik/haftalik/custom statistikalar (matn + premium rasm), leverage calculator va PostgreSQL
-backup/restore (Telegram private kanal orqali) — to'liq texnik topshiriqqa asosan qurilgan.
+kunlik/haftalik/custom statistikalar (matn + premium rasm), leverage calculator, real-time narx
+alertlari va PostgreSQL backup/restore (Telegram private kanal orqali).
 
 ## 🧱 Stack
 
@@ -11,42 +11,46 @@ backup/restore (Telegram private kanal orqali) — to'liq texnik topshiriqqa aso
 - SQLAlchemy 2.x (async) + asyncpg — PostgreSQL uchun
 - Alembic — DB migratsiyalari
 - Pillow — premium report rasm generatori (font bundle qilingan, `assets/fonts/`)
-- APScheduler — kunlik avtomatik backup
-- Railway — deploy (nixpacks)
+- APScheduler — kunlik avtomatik backup + har 30 soniyada alert tekshiruvi
+- aiohttp — Binance public API'dan real-time narx olish uchun
+- Railway — deploy (Railpack builder)
 
 ## 📁 Fayl tuzilishi
 
 ```
 meduz-trading-journal-bot/
 ├── bot/
-│   ├── main.py                # Entry point: dispatcher, routerlar, scheduler
-│   ├── config.py              # Env-based sozlamalar
+│   ├── main.py                 # Entry point: dispatcher, routerlar, scheduler
+│   ├── config.py               # Env-based sozlamalar
 │   ├── database/
-│   │   ├── models.py          # User, Trade, Backup (SQLAlchemy ORM)
-│   │   ├── engine.py          # Async engine/session
-│   │   └── crud.py            # DB amallari (race-safe, with_for_update)
+│   │   ├── models.py           # User, Trade, Backup, Alert (SQLAlchemy ORM)
+│   │   ├── engine.py           # Async engine/session
+│   │   └── crud.py             # DB amallari (race-safe, with_for_update)
 │   ├── handlers/
-│   │   ├── start.py           # /start, bosh menyu
-│   │   ├── trade_create.py    # ➕ Trade qo'shish FSM
-│   │   ├── pending.py         # ⏳ Pending: Activate/Missed/Delete
-│   │   ├── active.py          # 🟢 Active: SL/B-U/TP yopish
-│   │   ├── reports.py         # 📊 Kunlik/Haftalik/Custom hisobot
-│   │   ├── leverage.py        # 🧮 Leverage calculator
-│   │   └── settings.py        # ⚙️ Margin, backup, restore
+│   │   ├── start.py            # /start, bosh menyu
+│   │   ├── trade_create.py     # ➕ Trade qo'shish FSM
+│   │   ├── pending.py          # ⏳ Pending: Activate/Missed/Delete
+│   │   ├── active.py           # 🟢 Active: SL/B-U/TP yopish
+│   │   ├── reports.py          # 📊 Kunlik/Haftalik/Custom hisobot
+│   │   ├── leverage.py         # 🧮 Leverage calculator
+│   │   ├── recent_trades.py    # 🗑 Oxirgi 5 ta trade — istalganini o'chirish
+│   │   ├── alerts.py           # 🔔 Narx alertlari (coin + narx → bildirishnoma)
+│   │   └── settings.py         # ⚙️ Margin, backup, restore
 │   ├── services/
-│   │   ├── stats.py           # SQL-aggregation statistikalar
-│   │   ├── report_image.py    # Premium PNG report
-│   │   ├── leverage_calc.py   # Leverage formulasi
-│   │   └── backup.py          # pg_dump/pg_restore + Telegram kanal + retention
-│   ├── states/trade_states.py # Barcha FSM state guruhlari
-│   ├── keyboards/inline.py    # Inline tugmalar + typed CallbackData
-│   ├── middlewares/db.py      # Har update uchun DB session + user context
-│   └── utils/formatting.py    # Parsing, decimal formatting, xatolik handling
-├── alembic/                   # Migratsiyalar (async env.py)
-├── assets/fonts/               # Report rasm uchun bundle qilingan DejaVu fontlar
+│   │   ├── stats.py            # SQL-aggregation statistikalar
+│   │   ├── report_image.py     # Premium PNG report
+│   │   ├── leverage_calc.py    # Leverage formulasi
+│   │   ├── backup.py           # JSON dump/restore (pure Python) + Telegram kanal + retention
+│   │   ├── price_feed.py       # Binance public API orqali real-time narx
+│   │   └── alert_checker.py    # Background job: alertlarni narx bilan solishtiradi
+│   ├── states/trade_states.py  # Barcha FSM state guruhlari
+│   ├── keyboards/inline.py     # Inline tugmalar + typed CallbackData
+│   ├── middlewares/db.py       # Har update uchun DB session + user context
+│   └── utils/formatting.py     # Parsing, decimal formatting, xatolik handling
+├── alembic/                    # Migratsiyalar (async env.py)
+├── assets/fonts/                # Report rasm uchun bundle qilingan DejaVu fontlar
 ├── requirements.txt
-├── nixpacks.toml               # Railway build config (postgresql-client o'rnatadi)
-├── Procfile
+├── Procfile                     # worker: alembic upgrade head && python -m bot.main
 └── .env.example
 ```
 
@@ -85,17 +89,24 @@ python -m bot.main
 
 ## ☁️ Railway'ga deploy
 
-1. Railway'da yangi loyiha oching, GitHub repo'ni ulang.
-2. **PostgreSQL plugin** qo'shing — Railway avtomatik `DATABASE_URL` beradi (`postgres://...` formatida;
-   `bot/config.py` buni avtomatik `postgresql+asyncpg://` ga o'giradi).
-3. Variables bo'limida `BOT_TOKEN`, `ADMIN_ID`, `BACKUP_CHANNEL_ID`, `TIMEZONE` qo'shing.
-4. `nixpacks.toml` PostgreSQL client (`pg_dump`/`pg_restore`) ni build bosqichida o'rnatadi — qo'shimcha
-   sozlash shart emas.
-5. Deploy avtomatik: `alembic upgrade head` ishga tushadi, keyin bot polling rejimida ishlaydi.
+1. Railway'da yangi loyiha oching, GitHub repo'ni ulang (bitta service — ikkita emas, aks holda
+   ikkala instance bir xil `BOT_TOKEN` bilan pollling qilib "Conflict" xatosi beradi).
+2. **PostgreSQL** uchun alohida service qo'shing (`DATABASE_URL` shu servisdan referens sifatida
+   beriladi — `${{Postgres.DATABASE_URL}}`).
+3. Bot service Variables bo'limida `BOT_TOKEN`, `ADMIN_ID`, `BACKUP_CHANNEL_ID`, `TIMEZONE`,
+   `DATABASE_URL` qo'shing.
+4. Start command `Procfile`'dan avtomatik olinadi: `alembic upgrade head && python -m bot.main` —
+   shu bilan har deployda migratsiya ham avtomatik ishlaydi.
+
+**Diqqat — Railpack va preDeployCommand:** Railway'ning yangi "Railpack" builder'i (`nixpacks.toml`
+o'rniga) ishlatiladi va tajribada shu loyihada servis darajasidagi `preDeployCommand` sozlamasi
+amalda ishlamadi — shu sabab migratsiya to'g'ridan-to'g'ri `Procfile`'dagi `worker` buyrug'i ichiga
+(`&&` bilan) qo'shilgan. Agar kelajakda alohida release-fazasi kerak bo'lsa, avval buni real deployda
+tekshirib ko'ring.
 
 **Server almashtirilganda** (spec §23): yangi Railway loyihasida shu repo'ni qayta deploy qiling,
-xuddi shu environment variables'ni kiriting, PostgreSQL plugin'ni yangidan ulang (yoki backup'dan
-restore qiling — pastga qarang). Trade tarixi PostgreSQL'da saqlanadi, kod stateless.
+xuddi shu environment variables'ni kiriting, PostgreSQL'ni yangidan ulang (yoki backup'dan restore
+qiling — pastga qarang). Trade tarixi PostgreSQL'da saqlanadi, kod stateless.
 
 ## 🔄 Migratsiyalar
 
@@ -106,56 +117,84 @@ alembic revision --autogenerate -m "tavsif"
 alembic upgrade head
 ```
 
-Boshlang'ich migratsiya (`alembic/versions/`) ushbu loyihani tuzish jarayonida **haqiqiy local
-PostgreSQL 16 instance'ga qarshi** generatsiya qilingan va `alembic upgrade head` orqali sinovdan
-o'tkazilgan (pastga qarang).
+Barcha migratsiyalar (`alembic/versions/`) ushbu loyihani tuzish jarayonida **haqiqiy local
+PostgreSQL 16 instance'ga qarshi** generatsiya qilingan va qo'llanilgan (pastga qarang).
 
 ## ☁️ Backup / Restore
 
-- Har kuni soat **03:00 (Asia/Tashkent)** avtomatik backup: `pg_dump -Fc` → gzip → private Telegram
-  kanalga hujjat sifatida yuboriladi, xabar `file_id` DB'da saqlanadi (restore uchun).
+Backup **pure-Python JSON dump** sifatida ishlaydi (`users` + `trades` jadvallari) — `pg_dump`/
+`pg_restore` binary'lariga bog'liq emas, shuning uchun Railway qanday builder ishlatishidan qat'i
+nazar ishlайdi (birinchi versiyada `pg_dump` orqali qilingan edi, lekin Railway'ning Railpack
+builder'i uni image'ga o'rnatmagani sabab `FileNotFoundError: pg_dump` bilan ishlamay qolgan edi —
+shu sabab pure-Python yondashuvga o'tkazildi).
+
+- Har kuni soat **03:00 (Asia/Tashkent)** avtomatik backup: JSON → gzip → private Telegram kanalga
+  hujjat sifatida yuboriladi, xabarning `file_id`'si DB'da saqlanadi (restore uchun).
 - Retention: kunlik → 30 kun, haftalik (har Dushanba) → 12 hafta, oylik (har oyning 1-kuni) → 12 oy.
   **Eng oxirgi muvaffaqiyatli backup hech qachon o'chirilmaydi.**
 - `⚙️ Sozlamalar → ☁️ Backup Now` — qo'lda backup (faqat admin).
-- `⚙️ Sozlamalar → 🔄 Restore` — oxirgi muvaffaqiyatli backup'ni tasdiqlash bilan tiklaydi (faqat admin,
-  `⚠️` ogohlantirish + tasdiqlash tugmasi bilan).
+- `⚙️ Sozlamalar → 🔄 Restore` — oxirgi muvaffaqiyatli backup'ni tasdiqlash bilan tiklaydi (faqat
+  admin, `⚠️` ogohlantirish + tasdiqlash tugmasi bilan). Restore `users`+`trades` jadvallarini
+  to'liq almashtiradi va PK sequence'larni qayta tekislaydi.
 
-**Muhim:** `pg_dump`/`pg_restore` deploy muhitida mavjud bo'lishi kerak — Railway uchun bu
-`nixpacks.toml` orqali avtomatik ta'minlangan.
+## 🗑 Oxirgi tradelar
+
+Bosh menyudagi **🗑 Oxirgi tradelar** — statusidan qat'i nazar (pending/active/closed/missed) oxirgi
+5 ta trade'ni ko'rsatadi, har birida **🗑 O'chirish** tugmasi bor (tasdiqlash bilan). Bu, masalan,
+xato kiritilgan trade'ni journal tarixidan butunlay olib tashlash uchun.
+
+## 🔔 Narx alertlari
+
+Bosh menyudagi **🔔 Alert** — coin nomi va maqsadli narxni kiritish orqali alert qo'yiladi
+(masalan: `BTCUSDT` → `112000`). Narx Binance'ning ochiq API'sidan olinadi:
+
+- Alert qo'yilganda joriy narx bilan solishtirilib, avtomatik yo'nalish aniqlanadi (narx oshib shu
+  darajaga yetsa ⬆️, tushib yetsa ⬇️ — qo'shimcha savol berilmaydi).
+- Background job har **30 soniyada** barcha faol alertlarni bitta so'rov bilan (Binance'ning to'liq
+  ticker ro'yxati) tekshiradi — N ta alert bo'lsa ham 1 ta HTTP so'rov.
+- Narx yetganda foydalanuvchiga darhol Telegram xabari yuboriladi, alert bir martalik (TRIGGERED
+  holatiga o'tadi, qayta ishlamaydi).
+- **🔔 Alert → ❌ Bekor qilish** — istalgan faol alertni o'chirish mumkin.
 
 ## 🧪 Test natijalari
 
 Loyiha qurilishi davomida haqiqiy local PostgreSQL 16 instance ishga tushirilib, quyidagilar
 tekshirildi:
 
-- ✅ `alembic revision --autogenerate` + `alembic upgrade head` — schema xatosiz yaratildi va qo'llandi
+- ✅ `alembic revision --autogenerate` + `alembic upgrade head` — barcha migratsiyalar (jumladan
+  `alerts` jadvali) xatosiz yaratildi va qo'llandi
 - ✅ Trade lifecycle: yaratish → pending → activate → close (SL va TP/RR bilan)
 - ✅ Statistika hisob-kitobi (win rate, total R, average RR, coin breakdown) to'g'ri natija berdi
 - ✅ Premium report rasm generatsiyasi (Pillow) — muvaffaqiyatli PNG chiqdi
 - ✅ Leverage calculator — spec misolidagi natija bilan mos keldi (Margin $500, Risk $50, SL 2% → **5X**)
 - ✅ Duplicate-click himoyasi: allaqachon yopilgan trade'ni qayta yopishga urinish to'g'ri rad etildi
-  (`with_for_update` + status tekshiruvi)
-- ⚠️ Telegram Bot API bilan bog'liq qismlar (screenshot yuborish, backup kanaliga hujjat yuborish,
-  restore'da fayl yuklab olish) haqiqiy `BOT_TOKEN` va kanal bo'lmagani sabab **live Telegram muhitida
-  test qilinmadi** — kod aiogram 3.x rasmiy API'siga mos yozilgan, lekin birinchi real ishga
-  tushirishda sinab ko'rish tavsiya etiladi
+- ✅ **Backup JSON dump/restore round-trip** — real DB'ga real ma'lumot yozilib, dump olinib, DB
+  o'zgartirilib, restore qilinib, asl holatga aniq qaytgani tasdiqlandi
+- ✅ Alert CRUD: yaratish (yo'nalish avtomatik aniqlanishi), faol ro'yxat, trigger qilish, bekor
+  qilish — barchasi real DB'da tekshirildi
+- ✅ Recent-trades force-delete (istalgan statusdagi trade'ni o'chirish) tekshirildi
+- ✅ **Real production'da (Railway) deploy qilindi va sinovdan o'tkazildi** — shu jarayonda 3 ta real
+  xatolik topilib tuzatildi: (1) `greenlet` paketi requirements.txt'da yo'q edi, (2) Railway'ning
+  Railpack builder'i migratsiyani ishga tushirmagani, (3) `pg_dump` binary Railpack image'ida yo'qligi
+  — barchasi yuqorida tavsiflangan
+- ⚠️ Binance API'ga so'rov (`price_feed.py`) qurilish sandbox'ida tarmoq cheklovi sabab test
+  qilinmadi — Railway'da to'liq internet mavjud, shuning uchun productionda ishlaydi, lekin birinchi
+  alert qo'yilganda natijani tekshirib ko'rish tavsiya etiladi
 
 ## ⚠️ Ma'lum cheklovlar
 
-- Bot **long polling** rejimida ishlaydi (webhook emas) — bitta instance uchun yetarli, ko'p instance
-  kerak bo'lsa webhook + Redis-based FSM storage'ga o'tish kerak bo'ladi (hozir in-memory FSM storage).
-- `pg_dump`/`pg_restore` subprocess orqali chaqiriladi — Railway'dan boshqa platformaga deploy
-  qilinsa, o'sha muhitda ham postgresql-client mavjudligini tekshiring.
-- Restore doim **eng oxirgi** muvaffaqiyatli backup'ni tiklaydi (ixtiyoriy sanadan tanlash yo'q) —
-  soddalik uchun shunday qilindi.
-- Group signal, real-time narx/chart, price alert kabi funksiyalar ushbu texnik topshiriqda
-  so'ralmagan, shuning uchun kiritilmagan.
+- Bot **long polling** rejimida ishlaydi (webhook emas) — **faqat bitta** Railway service shu
+  `BOT_TOKEN` bilan ishlashi kerak; ikkinchi instance qo'shilsa Telegram "Conflict" xatosi beradi.
+- Restore doim **eng oxirgi** muvaffaqiyatli backup'ni tiklaydi (ixtiyoriy sanadan tanlash yo'q).
+- Alert narxlari faqat Binance'da mavjud spot juftliklar uchun ishlaydi (masalan `BTCUSDT`); futures-
+  only yoki Binance'da yo'q coinlar uchun xato beradi.
+- Group signal, real-time chart kabi funksiyalar ushbu texnik topshiriqda so'ralmagan, shuning uchun
+  kiritilmagan.
 
 ## 🚀 Kelgusi yaxshilanishlar
 
 - Webhook rejimiga o'tish + Redis FSM storage (ko'p worker uchun)
 - Restore'da backup ro'yxatidan sana tanlash imkoniyati
+- Alert uchun takrorlanuvchi (bir martalik emas) rejim
 - Coin bo'yicha filtrlab statistika ko'rish
-- Inline "🖼 Rasm" tugmasi — hozir rasm avtomatik matn bilan birga yuboriladi, xohlasa alohida
-  so'rash imkoniyati qo'shish mumkin
 - Admin panel (barcha userlar statistikasi, umumiy backup monitoring)

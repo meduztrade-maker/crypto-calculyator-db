@@ -1,5 +1,16 @@
 from bot.database.engine import async_session_maker, engine
-from bot.database.models import Backup, Base, Direction, ResultType, Trade, TradeStatus, User
+from bot.database.models import (
+    Alert,
+    AlertDirection,
+    AlertStatus,
+    Backup,
+    Base,
+    Direction,
+    ResultType,
+    Trade,
+    TradeStatus,
+    User,
+)
 
 __all__ = [
     "engine",
@@ -8,7 +19,10 @@ __all__ = [
     "User",
     "Trade",
     "Backup",
+    "Alert",
     "Direction",
     "TradeStatus",
     "ResultType",
+    "AlertStatus",
+    "AlertDirection",
 ]

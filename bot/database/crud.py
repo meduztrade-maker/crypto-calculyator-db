@@ -7,7 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from bot.config import settings
-from bot.database.models import Direction, ResultType, Trade, TradeStatus, User
+from bot.database.models import Alert, AlertDirection, AlertStatus, Direction, ResultType, Trade, TradeStatus, User
 
 
 def _now() -> datetime:
@@ -153,6 +153,26 @@ async def delete_trade(session: AsyncSession, user: User, trade_id: int) -> None
     await session.commit()
 
 
+async def list_recent_trades(session: AsyncSession, user: User, limit: int = 5) -> list[Trade]:
+    """Last N trades regardless of status — for the '🗑 Oxirgi tradelar' cleanup screen."""
+    result = await session.execute(
+        select(Trade)
+        .where(Trade.user_id == user.id)
+        .order_by(Trade.created_at.desc())
+        .limit(limit)
+    )
+    return list(result.scalars().all())
+
+
+async def force_delete_trade(session: AsyncSession, user: User, trade_id: int) -> None:
+    """Deletes a trade regardless of its status (used from the recent-trades cleanup screen)."""
+    trade = await get_user_trade(session, user, trade_id, lock=True)
+    if trade is None:
+        raise TradeStateError("Trade not found")
+    await session.delete(trade)
+    await session.commit()
+
+
 async def close_trade_sl(session: AsyncSession, user: User, trade_id: int, closing_screenshot_file_id: str) -> Trade:
     trade = await get_user_trade(session, user, trade_id, lock=True)
     if trade is None or trade.status != TradeStatus.ACTIVE:
@@ -188,3 +208,64 @@ async def close_trade_with_rr(
     await session.commit()
     await session.refresh(trade)
     return trade
+
+
+# ---------------------------------------------------------------------------
+# Alerts
+# ---------------------------------------------------------------------------
+
+async def create_alert(
+    session: AsyncSession, user: User, coin: str, target_price: Decimal, current_price: Decimal
+) -> Alert:
+    direction = AlertDirection.ABOVE if target_price >= current_price else AlertDirection.BELOW
+    alert = Alert(
+        user_id=user.id,
+        coin=coin.upper(),
+        target_price=target_price,
+        direction=direction,
+        price_at_creation=current_price,
+        status=AlertStatus.ACTIVE,
+    )
+    session.add(alert)
+    await session.commit()
+    await session.refresh(alert)
+    return alert
+
+
+async def list_active_alerts(session: AsyncSession, user: User) -> list[Alert]:
+    result = await session.execute(
+        select(Alert)
+        .where(Alert.user_id == user.id, Alert.status == AlertStatus.ACTIVE)
+        .order_by(Alert.created_at.desc())
+    )
+    return list(result.scalars().all())
+
+
+async def cancel_alert(session: AsyncSession, user: User, alert_id: int) -> Alert:
+    result = await session.execute(
+        select(Alert).where(Alert.id == alert_id, Alert.user_id == user.id).with_for_update()
+    )
+    alert = result.scalar_one_or_none()
+    if alert is None or alert.status != AlertStatus.ACTIVE:
+        raise TradeStateError("Alert is not active")
+    alert.status = AlertStatus.CANCELLED
+    await session.commit()
+    await session.refresh(alert)
+    return alert
+
+
+async def list_all_active_alerts(session: AsyncSession) -> list[Alert]:
+    result = await session.execute(select(Alert).where(Alert.status == AlertStatus.ACTIVE))
+    return list(result.scalars().all())
+
+
+async def mark_alert_triggered(session: AsyncSession, alert_id: int) -> Alert | None:
+    result = await session.execute(select(Alert).where(Alert.id == alert_id).with_for_update())
+    alert = result.scalar_one_or_none()
+    if alert is None or alert.status != AlertStatus.ACTIVE:
+        return None
+    alert.status = AlertStatus.TRIGGERED
+    alert.triggered_at = _now()
+    await session.commit()
+    await session.refresh(alert)
+    return alert

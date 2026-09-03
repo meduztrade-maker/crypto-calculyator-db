@@ -32,3 +32,8 @@ class CustomPeriod(StatesGroup):
 
 class RestoreConfirm(StatesGroup):
     confirm = State()
+
+
+class AlertCreate(StatesGroup):
+    coin = State()
+    price = State()

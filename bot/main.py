@@ -10,8 +10,19 @@ from aiogram.enums import ParseMode
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 from bot.config import settings
-from bot.handlers import active, leverage, pending, reports, settings as settings_handlers, start, trade_create
+from bot.handlers import (
+    active,
+    alerts,
+    leverage,
+    pending,
+    recent_trades,
+    reports,
+    settings as settings_handlers,
+    start,
+    trade_create,
+)
 from bot.middlewares.db import DbSessionMiddleware
+from bot.services.alert_checker import check_and_notify_alerts
 from bot.services.backup import run_backup
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
@@ -30,6 +41,8 @@ def build_dispatcher() -> Dispatcher:
     dp.include_router(active.router)
     dp.include_router(reports.router)
     dp.include_router(leverage.router)
+    dp.include_router(recent_trades.router)
+    dp.include_router(alerts.router)
     dp.include_router(settings_handlers.router)
 
     return dp
@@ -54,6 +67,23 @@ def setup_scheduler(bot: Bot) -> AsyncIOScheduler:
         id="daily_backup",
         replace_existing=True,
     )
+
+    async def scheduled_alert_check() -> None:
+        try:
+            await check_and_notify_alerts(bot)
+        except Exception:  # noqa: BLE001
+            logger.exception("Alert check failed")
+
+    scheduler.add_job(
+        scheduled_alert_check,
+        trigger="interval",
+        seconds=30,
+        id="alert_check",
+        replace_existing=True,
+        max_instances=1,
+        coalesce=True,
+    )
+
     scheduler.start()
     return scheduler
 

@@ -100,6 +100,33 @@ def trade_card_closed(trade: Trade) -> str:
     )
 
 
+def trade_card_generic(trade: Trade) -> str:
+    """Status-aware one-trade summary — used by the 'oxirgi tradelar' (recent trades) screen."""
+    status_label = {
+        "PENDING": "⏳ PENDING",
+        "ACTIVE": "🟢 ACTIVE",
+        "CLOSED": "✅ CLOSED",
+        "MISSED": "⚪ MISSED",
+        "CANCELLED": "⚪ CANCELLED",
+    }.get(trade.status.value, trade.status.value)
+
+    lines = [
+        status_label,
+        "",
+        trade.coin,
+        "🟢 LONG" if trade.direction.value == "LONG" else "🔴 SHORT",
+        f"Entry: {fmt_price(trade.entry_price)}",
+        f"SL: {fmt_price(trade.stop_loss_price)}",
+    ]
+    if trade.status.value == "CLOSED":
+        result_label = {"SL": "🛑 SL", "BU": "🟡 B/U", "TP": "🟢 TP"}.get(
+            trade.result_type.value if trade.result_type else "", "-"
+        )
+        lines.append(f"Natija: {result_label} ({fmt_rr(trade.result_rr)})")
+    lines.append(f"Sana: {trade.created_at.strftime('%d.%m.%Y %H:%M')}")
+    return "\n".join(lines)
+
+
 def safe_handler(func):
     """
     Decorator: never let a handler crash the bot (spec section 27).

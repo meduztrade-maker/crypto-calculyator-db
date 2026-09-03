@@ -1,8 +1,0 @@
-[phases.setup]
-nixPkgs = ["python312", "postgresql"]
-
-[phases.install]
-cmds = ["pip install --break-system-packages -r requirements.txt"]
-
-[start]
-cmd = "alembic upgrade head && python -m bot.main"

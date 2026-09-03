@@ -40,6 +40,16 @@ class BackupCB(CallbackData, prefix="backup"):
     action: str  # now | restore | last | restore_yes | restore_no
 
 
+class RecentTradeCB(CallbackData, prefix="rtrade"):
+    action: str  # delete | confirm_delete
+    trade_id: int
+
+
+class AlertCB(CallbackData, prefix="alert"):
+    action: str  # cancel
+    alert_id: int
+
+
 # ---------------------------------------------------------------------------
 # Static keyboards
 # ---------------------------------------------------------------------------
@@ -51,6 +61,8 @@ def main_menu() -> InlineKeyboardMarkup:
     b.button(text="🟢 Active", callback_data=NavCB(target="active"))
     b.button(text="📊 Hisobot ulashish", callback_data=NavCB(target="reports"))
     b.button(text="🧮 Leverage Calculator", callback_data=NavCB(target="leverage"))
+    b.button(text="🗑 Oxirgi tradelar", callback_data=NavCB(target="recent_trades"))
+    b.button(text="🔔 Alert", callback_data=NavCB(target="alerts"))
     b.button(text="⚙️ Sozlamalar", callback_data=NavCB(target="settings"))
     b.adjust(1)
     return b.as_markup()
@@ -150,4 +162,34 @@ def restore_confirm_keyboard() -> InlineKeyboardMarkup:
     b.button(text="✅ Yes, Restore", callback_data=BackupCB(action="restore_yes"))
     b.button(text="❌ Cancel", callback_data=BackupCB(action="restore_no"))
     b.adjust(2)
+    return b.as_markup()
+
+
+def recent_trade_keyboard(trade_id: int) -> InlineKeyboardMarkup:
+    b = InlineKeyboardBuilder()
+    b.button(text="🗑 O'chirish", callback_data=RecentTradeCB(action="delete", trade_id=trade_id))
+    b.adjust(1)
+    return b.as_markup()
+
+
+def recent_trade_confirm_keyboard(trade_id: int) -> InlineKeyboardMarkup:
+    b = InlineKeyboardBuilder()
+    b.button(text="✅ Ha, o'chirish", callback_data=RecentTradeCB(action="confirm_delete", trade_id=trade_id))
+    b.button(text="❌ Bekor qilish", callback_data=NavCB(target="recent_trades"))
+    b.adjust(1)
+    return b.as_markup()
+
+
+def alerts_menu() -> InlineKeyboardMarkup:
+    b = InlineKeyboardBuilder()
+    b.button(text="➕ Yangi alert", callback_data=NavCB(target="add_alert"))
+    b.button(text="🏠 Bosh menu", callback_data=NavCB(target="home"))
+    b.adjust(1)
+    return b.as_markup()
+
+
+def alert_item_keyboard(alert_id: int) -> InlineKeyboardMarkup:
+    b = InlineKeyboardBuilder()
+    b.button(text="❌ Bekor qilish", callback_data=AlertCB(action="cancel", alert_id=alert_id))
+    b.adjust(1)
     return b.as_markup()

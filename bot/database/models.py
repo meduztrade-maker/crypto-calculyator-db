@@ -43,6 +43,17 @@ class BackupStatus(str, enum.Enum):
     FAILED = "FAILED"
 
 
+class AlertStatus(str, enum.Enum):
+    ACTIVE = "ACTIVE"
+    TRIGGERED = "TRIGGERED"
+    CANCELLED = "CANCELLED"
+
+
+class AlertDirection(str, enum.Enum):
+    ABOVE = "ABOVE"  # trigger when price rises to/above target
+    BELOW = "BELOW"  # trigger when price falls to/below target
+
+
 class User(Base):
     __tablename__ = "users"
 
@@ -98,3 +109,21 @@ class Backup(Base):
     file_name: Mapped[str] = mapped_column(String(128), nullable=False)
     status: Mapped[BackupStatus] = mapped_column(Enum(BackupStatus, name="backup_status_enum"), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class Alert(Base):
+    __tablename__ = "alerts"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True, nullable=False)
+
+    coin: Mapped[str] = mapped_column(String(32), nullable=False)
+    target_price: Mapped[Decimal] = mapped_column(Numeric(24, 8), nullable=False)
+    direction: Mapped[AlertDirection] = mapped_column(Enum(AlertDirection, name="alert_direction_enum"), nullable=False)
+    status: Mapped[AlertStatus] = mapped_column(
+        Enum(AlertStatus, name="alert_status_enum"), default=AlertStatus.ACTIVE, index=True
+    )
+    price_at_creation: Mapped[Decimal] = mapped_column(Numeric(24, 8), nullable=False)
+
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    triggered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

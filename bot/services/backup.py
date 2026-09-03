@@ -1,56 +1,126 @@
 from __future__ import annotations
 
+import enum
 import gzip
+import json
 import logging
-import os
-import subprocess
 import tempfile
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
+from decimal import Decimal
+from pathlib import Path
+from typing import Any
 
 from aiogram import Bot
-from aiogram.types import BufferedInputFile, FSInputFile
-from sqlalchemy import select
+from aiogram.types import BufferedInputFile
+from sqlalchemy import delete, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from bot.config import settings
 from bot.database.engine import async_session_maker
-from bot.database.models import Backup, BackupStatus, BackupType
+from bot.database.models import Backup, BackupStatus, BackupType, Trade, User
 
 logger = logging.getLogger("meduz_bot")
 
-
-def _plain_pg_url() -> str:
-    """pg_dump needs a libpq-style URL, not the SQLAlchemy asyncpg driver URL."""
-    url = settings.database_url.replace("postgresql+asyncpg://", "postgresql://", 1)
-    return url
+DUMP_VERSION = 1
 
 
-def _dump_database_to_file(dest_path: str) -> None:
-    """
-    Shells out to pg_dump. Requires the `postgresql-client` package to be present
-    in the deployment image (see nixpacks.toml — installed there for Railway).
-    """
-    url = _plain_pg_url()
-    result = subprocess.run(
-        ["pg_dump", "--no-owner", "--no-privileges", "-Fc", "-f", dest_path, url],
-        capture_output=True,
-        text=True,
-        timeout=300,
-    )
-    if result.returncode != 0:
-        raise RuntimeError(f"pg_dump failed: {result.stderr[-2000:]}")
+# ---------------------------------------------------------------------------
+# JSON encode/decode helpers (Decimal / datetime / enum aware)
+# ---------------------------------------------------------------------------
+
+def _json_default(obj: Any) -> Any:
+    if isinstance(obj, Decimal):
+        return {"__decimal__": str(obj)}
+    if isinstance(obj, datetime):
+        return {"__datetime__": obj.isoformat()}
+    if isinstance(obj, date):
+        return {"__date__": obj.isoformat()}
+    if isinstance(obj, enum.Enum):
+        return obj.value
+    raise TypeError(f"Object of type {type(obj)} is not JSON serializable")
 
 
-def _restore_database_from_file(src_path: str) -> None:
-    url = _plain_pg_url()
-    result = subprocess.run(
-        ["pg_restore", "--no-owner", "--no-privileges", "--clean", "--if-exists", "-d", url, src_path],
-        capture_output=True,
-        text=True,
-        timeout=300,
-    )
-    if result.returncode != 0:
-        raise RuntimeError(f"pg_restore failed: {result.stderr[-2000:]}")
+def _json_object_hook(d: dict) -> Any:
+    if "__decimal__" in d:
+        return Decimal(d["__decimal__"])
+    if "__datetime__" in d:
+        return datetime.fromisoformat(d["__datetime__"])
+    if "__date__" in d:
+        return date.fromisoformat(d["__date__"])
+    return d
+
+
+def _row_to_dict(obj, columns: list[str]) -> dict:
+    return {col: getattr(obj, col) for col in columns}
+
+
+USER_COLUMNS = ["id", "telegram_id", "username", "margin", "timezone", "is_admin", "created_at"]
+TRADE_COLUMNS = [
+    "id", "user_id", "coin", "direction", "status", "risk_percent", "entry_price",
+    "stop_loss_price", "stop_distance_percent", "result_type", "result_rr",
+    "opening_screenshot_file_id", "closing_screenshot_file_id",
+    "created_at", "activated_at", "closed_at", "missed_at",
+]
+
+
+# ---------------------------------------------------------------------------
+# Dump / restore (pure Python — works in any deploy environment)
+# ---------------------------------------------------------------------------
+
+async def _dump_database_to_file(session: AsyncSession, dest_path: str) -> None:
+    users = (await session.execute(select(User).order_by(User.id))).scalars().all()
+    trades = (await session.execute(select(Trade).order_by(Trade.id))).scalars().all()
+
+    payload = {
+        "version": DUMP_VERSION,
+        "exported_at": datetime.now(timezone.utc),
+        "users": [_row_to_dict(u, USER_COLUMNS) for u in users],
+        "trades": [_row_to_dict(t, TRADE_COLUMNS) for t in trades],
+    }
+
+    with open(dest_path, "w", encoding="utf-8") as f:
+        json.dump(payload, f, default=_json_default, ensure_ascii=False)
+
+
+async def _restore_database_from_file(session: AsyncSession, src_path: str) -> None:
+    with open(src_path, "r", encoding="utf-8") as f:
+        payload = json.load(f, object_hook=_json_object_hook)
+
+    async with session.begin():
+        # Trades first (FK -> users), then users, to respect referential integrity while clearing.
+        await session.execute(delete(Trade))
+        await session.execute(delete(User))
+
+        for u in payload["users"]:
+            await session.execute(
+                text(
+                    "INSERT INTO users (id, telegram_id, username, margin, timezone, is_admin, created_at) "
+                    "VALUES (:id, :telegram_id, :username, :margin, :timezone, :is_admin, :created_at)"
+                ),
+                u,
+            )
+        for t in payload["trades"]:
+            await session.execute(
+                text(
+                    "INSERT INTO trades (id, user_id, coin, direction, status, risk_percent, entry_price, "
+                    "stop_loss_price, stop_distance_percent, result_type, result_rr, "
+                    "opening_screenshot_file_id, closing_screenshot_file_id, "
+                    "created_at, activated_at, closed_at, missed_at) "
+                    "VALUES (:id, :user_id, :coin, :direction, :status, :risk_percent, :entry_price, "
+                    ":stop_loss_price, :stop_distance_percent, :result_type, :result_rr, "
+                    ":opening_screenshot_file_id, :closing_screenshot_file_id, "
+                    ":created_at, :activated_at, :closed_at, :missed_at)"
+                ),
+                t,
+            )
+
+        # Realign auto-increment sequences with the restored max ids.
+        await session.execute(text(
+            "SELECT setval(pg_get_serial_sequence('users', 'id'), COALESCE((SELECT MAX(id) FROM users), 1))"
+        ))
+        await session.execute(text(
+            "SELECT setval(pg_get_serial_sequence('trades', 'id'), COALESCE((SELECT MAX(id) FROM trades), 1))"
+        ))
 
 
 def _backup_types_for(now: datetime) -> list[BackupType]:
@@ -63,45 +133,46 @@ def _backup_types_for(now: datetime) -> list[BackupType]:
 
 
 async def run_backup(bot: Bot, *, manual: bool = False) -> Backup:
-    """Dumps the DB, gzips it, uploads it to the private backup channel, records it, and purges old backups."""
+    """Dumps users+trades to JSON, gzips it, uploads to the private backup channel, records it, purges old ones."""
     now = datetime.now(timezone.utc)
-    file_name = f"backup_{now.strftime('%Y-%m-%d_%H-%M')}.sql.gz"
+    file_name = f"backup_{now.strftime('%Y-%m-%d_%H-%M')}.json.gz"
 
-    with tempfile.TemporaryDirectory() as tmp:
-        dump_path = os.path.join(tmp, "dump.sql")
-        gz_path = os.path.join(tmp, file_name)
-        try:
-            _dump_database_to_file(dump_path)
-            with open(dump_path, "rb") as f_in, gzip.open(gz_path, "wb") as f_out:
-                f_out.writelines(f_in)
-
-            caption = (
-                "☁️ MEDUZ JOURNAL BACKUP\n\n"
-                f"Date: {now.strftime('%d.%m.%Y %H:%M UTC')}\n"
-                "Database: PostgreSQL\n"
-                "Status: ✅ Successful"
-            )
-            msg = await bot.send_document(
-                chat_id=settings.backup_channel_id,
-                document=FSInputFile(gz_path, filename=file_name),
-                caption=caption,
-            )
-            status = BackupStatus.SUCCESS
-            message_id = msg.message_id
-            file_id = msg.document.file_id
-        except Exception:
-            logger.exception("Backup failed")
-            status = BackupStatus.FAILED
-            message_id = None
-            file_id = None
+    async with async_session_maker() as dump_session:
+        with tempfile.TemporaryDirectory() as tmp:
+            dump_path = Path(tmp) / "dump.json"
+            gz_path = Path(tmp) / file_name
             try:
-                await bot.send_message(
-                    settings.backup_channel_id,
-                    f"☁️ MEDUZ JOURNAL BACKUP\n\nDate: {now.strftime('%d.%m.%Y %H:%M UTC')}\n"
-                    "Database: PostgreSQL\nStatus: ❌ Failed",
+                await _dump_database_to_file(dump_session, str(dump_path))
+                with open(dump_path, "rb") as f_in:
+                    gz_path.write_bytes(gzip.compress(f_in.read()))
+
+                caption = (
+                    "☁️ MEDUZ JOURNAL BACKUP\n\n"
+                    f"Date: {now.strftime('%d.%m.%Y %H:%M UTC')}\n"
+                    "Database: PostgreSQL (JSON dump)\n"
+                    "Status: ✅ Successful"
                 )
-            except Exception:  # noqa: BLE001
-                logger.exception("Could not notify backup channel of failure")
+                msg = await bot.send_document(
+                    chat_id=settings.backup_channel_id,
+                    document=BufferedInputFile(gz_path.read_bytes(), filename=file_name),
+                    caption=caption,
+                )
+                status = BackupStatus.SUCCESS
+                message_id = msg.message_id
+                file_id = msg.document.file_id
+            except Exception:
+                logger.exception("Backup failed")
+                status = BackupStatus.FAILED
+                message_id = None
+                file_id = None
+                try:
+                    await bot.send_message(
+                        settings.backup_channel_id,
+                        f"☁️ MEDUZ JOURNAL BACKUP\n\nDate: {now.strftime('%d.%m.%Y %H:%M UTC')}\n"
+                        "Database: PostgreSQL\nStatus: ❌ Failed",
+                    )
+                except Exception:  # noqa: BLE001
+                    logger.exception("Could not notify backup channel of failure")
 
     async with async_session_maker() as session:
         types = [BackupType.MANUAL] if manual else _backup_types_for(now)
@@ -183,11 +254,10 @@ async def restore_latest(bot: Bot, session: AsyncSession) -> Backup:
         raise RuntimeError("No successful backup available to restore from")
 
     with tempfile.TemporaryDirectory() as tmp:
-        gz_path = os.path.join(tmp, row.file_name)
-        dump_path = os.path.join(tmp, "restore.sql")
-        await bot.download(row.telegram_file_id, destination=gz_path)
-        with gzip.open(gz_path, "rb") as f_in, open(dump_path, "wb") as f_out:
-            f_out.writelines(f_in)
-        _restore_database_from_file(dump_path)
+        gz_path = Path(tmp) / row.file_name
+        dump_path = Path(tmp) / "restore.json"
+        await bot.download(row.telegram_file_id, destination=str(gz_path))
+        dump_path.write_bytes(gzip.decompress(gz_path.read_bytes()))
+        await _restore_database_from_file(session, str(dump_path))
 
     return row
