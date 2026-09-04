@@ -5,29 +5,64 @@ from decimal import Decimal
 from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
-
-from bot.database.crud import TradeStateError, close_trade_sl, close_trade_with_rr, get_user_trade, list_active_trades
-from bot.database.models import ResultType, User
-from bot.keyboards.inline import NavCB, RRCB, TradeCB, active_trade_keyboard, cancel_button, home_button, rr_keyboard
-from bot.states.trade_states import TradeClose
-from bot.utils.formatting import InputError, dec_str, fmt_rr, parse_decimal, safe_handler, trade_card_active, trade_card_closed
 from sqlalchemy.ext.asyncio import AsyncSession
+
+from bot.database.crud import (
+    TradeStateError,
+    close_trade_sl,
+    close_trade_with_rr,
+    get_user_trade,
+    list_active_trades,
+)
+from bot.database.models import ResultType, User
+from bot.keyboards.inline import (
+    NavCB,
+    RRCB,
+    TradeCB,
+    TradeListItemCB,
+    active_detail_keyboard,
+    active_list_keyboard,
+    back_button,
+    cancel_button,
+    rr_keyboard,
+)
+from bot.states.trade_states import TradeClose
+from bot.utils.formatting import InputError, dec_str, parse_decimal, safe_handler, trade_card_active, trade_card_closed
 
 router = Router(name="active")
 
 
-@router.callback_query(NavCB.filter(F.target == "active"))
-@safe_handler
-async def show_active(callback: CallbackQuery, session: AsyncSession, user: User) -> None:
+async def _active_list_content(session: AsyncSession, user: User):
     trades = await list_active_trades(session, user)
     if not trades:
-        await callback.message.edit_text("🟢 Active trade'lar yo'q.", reply_markup=home_button())
-        await callback.answer()
-        return
+        return "🟢 Active trade'lar yo'q.", None
+    text = f"🟢 ACTIVE ({len(trades)} ta)\n\nBatafsil ko'rish uchun tanlang:"
+    return text, active_list_keyboard(trades)
 
-    await callback.message.edit_text(f"🟢 ACTIVE ({len(trades)} ta)", reply_markup=home_button())
-    for trade in trades:
-        await callback.message.answer(trade_card_active(trade), reply_markup=active_trade_keyboard(trade.id))
+
+async def render_active(message: Message, session: AsyncSession, user: User) -> None:
+    text, kb = await _active_list_content(session, user)
+    await message.answer(text, reply_markup=kb)
+
+
+@router.callback_query(NavCB.filter(F.target == "active"))
+@safe_handler
+async def back_to_active(callback: CallbackQuery, session: AsyncSession, user: User) -> None:
+    text, kb = await _active_list_content(session, user)
+    await callback.message.edit_text(text, reply_markup=kb)
+    await callback.answer()
+
+
+@router.callback_query(TradeListItemCB.filter(F.list_type == "active"))
+@safe_handler
+async def active_detail(callback: CallbackQuery, callback_data: TradeListItemCB, session: AsyncSession, user: User) -> None:
+    trade = await get_user_trade(session, user, callback_data.trade_id)
+    if trade is None or trade.status.value != "ACTIVE":
+        await callback.answer("❌ Bu trade endi active emas.", show_alert=True)
+        text, kb = await _active_list_content(session, user)
+        await callback.message.edit_text(text, reply_markup=kb)
+        return
+    await callback.message.edit_text(trade_card_active(trade), reply_markup=active_detail_keyboard(trade.id))
     await callback.answer()
 
 
@@ -120,11 +155,11 @@ async def close_screenshot_received(message: Message, state: FSMContext, session
             trade = await close_trade_with_rr(session, user, trade_id, ResultType(result_type), rr, file_id)
     except TradeStateError:
         await state.clear()
-        await message.answer("❌ Bu trade allaqachon yopilgan yoki topilmadi.", reply_markup=home_button())
+        await message.answer("❌ Bu trade allaqachon yopilgan yoki topilmadi.")
         return
 
     await state.clear()
-    await message.answer(trade_card_closed(trade), reply_markup=home_button())
+    await message.answer(trade_card_closed(trade), reply_markup=back_button("active", "🔙 Active ro'yxatiga"))
 
 
 @router.message(TradeClose.screenshot)

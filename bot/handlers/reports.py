@@ -6,7 +6,7 @@ from aiogram.types import BufferedInputFile, CallbackQuery, Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from bot.database.models import User
-from bot.keyboards.inline import NavCB, ReportCB, cancel_button, home_button, reports_menu
+from bot.keyboards.inline import ReportCB, cancel_button, reports_menu
 from bot.services.report_image import render_report_image
 from bot.services.stats import compute_period_stats, current_week_bounds, custom_bounds, format_text_report, today_bounds
 from bot.states.trade_states import CustomPeriod
@@ -15,17 +15,14 @@ from bot.utils.formatting import parse_date, safe_handler
 router = Router(name="reports")
 
 
-@router.callback_query(NavCB.filter(F.target == "reports"))
-@safe_handler
-async def show_reports_menu(callback: CallbackQuery) -> None:
-    await callback.message.edit_text("📊 Hisobot turini tanlang:", reply_markup=reports_menu())
-    await callback.answer()
+async def render_reports(message: Message) -> None:
+    await message.answer("📊 Hisobot turini tanlang:", reply_markup=reports_menu())
 
 
 async def _send_report(target: Message, session: AsyncSession, user: User, title: str, start, end) -> None:
     stats = await compute_period_stats(session, user, start, end)
     text = format_text_report(title, stats)
-    await target.answer(text, reply_markup=home_button())
+    await target.answer(text)
 
     image_bytes = render_report_image(title, stats)
     await target.answer_photo(

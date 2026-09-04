@@ -5,6 +5,7 @@ from decimal import Decimal
 from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from bot.database.crud import create_pending_trade
 from bot.database.models import Direction, User
@@ -12,25 +13,20 @@ from bot.keyboards.inline import (
     DirectionCB,
     NavCB,
     RiskCB,
+    back_button,
     cancel_button,
     direction_keyboard,
-    main_menu,
-    pending_trade_keyboard,
     risk_keyboard,
 )
 from bot.states.trade_states import TradeCreate
 from bot.utils.formatting import InputError, parse_decimal, safe_handler, trade_card_pending
-from sqlalchemy.ext.asyncio import AsyncSession
 
 router = Router(name="trade_create")
 
 
-@router.callback_query(NavCB.filter(F.target == "add_trade"))
-@safe_handler
-async def start_add_trade(callback: CallbackQuery, state: FSMContext) -> None:
+async def render_add_trade(message: Message, state: FSMContext) -> None:
     await state.set_state(TradeCreate.coin)
-    await callback.message.edit_text("🪙 Coin nomini kiriting:", reply_markup=cancel_button())
-    await callback.answer()
+    await message.answer("🪙 Coin nomini kiriting:", reply_markup=cancel_button())
 
 
 @router.message(TradeCreate.coin)
@@ -112,7 +108,7 @@ async def got_screenshot(message: Message, state: FSMContext, session: AsyncSess
         opening_screenshot_file_id=file_id,
     )
     await state.clear()
-    await message.answer(trade_card_pending(trade), reply_markup=pending_trade_keyboard(trade.id))
+    await message.answer(trade_card_pending(trade), reply_markup=back_button("pending", "🔙 Pending ro'yxatiga"))
 
 
 @router.message(TradeCreate.screenshot)

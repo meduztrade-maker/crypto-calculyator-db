@@ -137,6 +137,28 @@ shu sabab pure-Python yondashuvga o'tkazildi).
   admin, `⚠️` ogohlantirish + tasdiqlash tugmasi bilan). Restore `users`+`trades` jadvallarini
   to'liq almashtiradi va PK sequence'larni qayta tekislaydi.
 
+## 🧭 Navigatsiya dizayni
+
+Bot ikkita darajali navigatsiyadan foydalanadi — professional Telegram botlarda keng qo'llaniladigan
+pattern:
+
+- **Pastki doimiy menyu** (`ReplyKeyboardMarkup`, `/start`da bir marta o'rnatiladi) — 8 ta asosiy
+  bo'lim doim matn kiritish maydonining ustida turadi, chatni qanchalik pastga tushirmang, hech qachon
+  yo'qolmaydi. Har qanday bo'lim tugmasini bosish **darhol ishlaydi** — hatto boshqa bir amal
+  o'rtasida (masalan entry narxi kiritilayotganda) bosilsa ham: `menu.py` routeri eng birinchi
+  ro'yxatdan o'tkazilgan (`main.py`da `start` dan keyin, qolgan hamma state-bog'liq routerlardan
+  oldin), shuning uchun u har doim ustunlik qiladi, joriy FSM holatini tozalab, so'ralgan bo'limga
+  o'tkazadi — "adashib qolish" imkonsiz.
+- **Ro'yxat → tafsilot → orqaga** pattern — Pending, Active, Oxirgi tradelar, Alert bo'limlari endi
+  har bir element uchun alohida xabar yubormaydi (avval shunday edi va chatni "bardak" qilib
+  yuborardi). Buning o'rniga: bitta xabar ro'yxatni tugmalar sifatida ko'rsatadi → tanlangan element
+  o'sha **bitta xabar ichida** (`edit_text`) tafsilotga almashadi, harakat tugmalari + **🔙 Orqaga**
+  bilan → orqaga bosilsa yana o'sha xabar ro'yxatga qaytadi. Xabarlar soni ko'paymaydi, eski
+  tugmalar "osilib" qolmaydi.
+- Screenshot talab qiladigan oqimlar (trade qo'shish, SL/B-U/TP yopish) tabiatan bir nechta xabar
+  talab qiladi (bot navbat bilan so'raydi, user matn/rasm yuboradi) — bu qismlarda ham har bosqichda
+  **❌ Bekor qilish** tugmasi bor va yakunda natija bitta aniq xabar bilan ko'rsatiladi.
+
 ## 🗑 Oxirgi tradelar
 
 Bosh menyudagi **🗑 Oxirgi tradelar** — statusidan qat'i nazar (pending/active/closed/missed) oxirgi
@@ -180,6 +202,9 @@ tekshirildi:
 - ⚠️ Binance API'ga so'rov (`price_feed.py`) qurilish sandbox'ida tarmoq cheklovi sabab test
   qilinmadi — Railway'da to'liq internet mavjud, shuning uchun productionda ishlaydi, lekin birinchi
   alert qo'yilganda natijani tekshirib ko'rish tavsiya etiladi
+- ✅ Navigatsiya qayta qurilgandan keyin `Dispatcher` to'liq yig'ilishi va router tartibi
+  (`menu` routeri `start`dan keyin, qolgan hamma state-bog'liq routerlardan oldin turishi) dastur
+  ichida tekshirildi
 
 ## ⚠️ Ma'lum cheklovlar
 

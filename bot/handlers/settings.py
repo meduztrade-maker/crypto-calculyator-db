@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from bot.database.crud import update_margin
 from bot.database.models import User
-from bot.keyboards.inline import BackupCB, NavCB, cancel_button, home_button, restore_confirm_keyboard, settings_menu
+from bot.keyboards.inline import BackupCB, NavCB, cancel_button, restore_confirm_keyboard, settings_menu
 from bot.services.backup import get_last_backup, restore_latest, run_backup
 from bot.states.trade_states import RestoreConfirm, SettingsFlow
 from bot.utils.formatting import dec_str, parse_decimal, safe_handler
@@ -15,12 +15,9 @@ from bot.utils.formatting import dec_str, parse_decimal, safe_handler
 router = Router(name="settings")
 
 
-@router.callback_query(NavCB.filter(F.target == "settings"))
-@safe_handler
-async def show_settings(callback: CallbackQuery, user: User) -> None:
+async def render_settings(message: Message, user: User) -> None:
     text = f"⚙️ SOZLAMALAR\n\n💵 Joriy margin: ${dec_str(user.margin)}"
-    await callback.message.edit_text(text, reply_markup=settings_menu())
-    await callback.answer()
+    await message.answer(text, reply_markup=settings_menu())
 
 
 @router.callback_query(NavCB.filter(F.target == "change_margin"))
@@ -37,7 +34,7 @@ async def margin_entered(message: Message, state: FSMContext, session: AsyncSess
     value = parse_decimal(message.text)
     await update_margin(session, user, value)
     await state.clear()
-    await message.answer(f"✅ Margin saqlandi: ${dec_str(value)}", reply_markup=home_button())
+    await message.answer(f"✅ Margin saqlandi: ${dec_str(value)}")
 
 
 def _is_admin(user: User) -> bool:
@@ -53,7 +50,7 @@ async def backup_now(callback: CallbackQuery, bot: Bot, user: User) -> None:
     await callback.answer("☁️ Backup boshlandi...")
     backup = await run_backup(bot, manual=True)
     status = "✅ Successful" if backup.status.value == "SUCCESS" else "❌ Failed"
-    await callback.message.answer(f"☁️ MEDUZ JOURNAL BACKUP\n\nStatus: {status}", reply_markup=home_button())
+    await callback.message.answer(f"☁️ MEDUZ JOURNAL BACKUP\n\nStatus: {status}")
 
 
 @router.callback_query(BackupCB.filter(F.action == "last"))
@@ -64,15 +61,14 @@ async def backup_last(callback: CallbackQuery, session: AsyncSession, user: User
         return
     backup = await get_last_backup(session)
     if backup is None:
-        await callback.message.edit_text("☁️ Hali backup qilinmagan.", reply_markup=home_button())
-    else:
-        await callback.message.edit_text(
-            f"🕐 LAST BACKUP\n\n"
-            f"Sana: {backup.created_at.strftime('%d.%m.%Y %H:%M UTC')}\n"
-            f"Turi: {backup.backup_type.value}\n"
-            f"Status: {'✅' if backup.status.value == 'SUCCESS' else '❌'} {backup.status.value}",
-            reply_markup=home_button(),
-        )
+        await callback.answer("☁️ Hali backup qilinmagan.", show_alert=True)
+        return
+    await callback.message.answer(
+        f"🕐 LAST BACKUP\n\n"
+        f"Sana: {backup.created_at.strftime('%d.%m.%Y %H:%M UTC')}\n"
+        f"Turi: {backup.backup_type.value}\n"
+        f"Status: {'✅' if backup.status.value == 'SUCCESS' else '❌'} {backup.status.value}"
+    )
     await callback.answer()
 
 
@@ -102,16 +98,15 @@ async def restore_confirmed(callback: CallbackQuery, state: FSMContext, bot: Bot
     try:
         backup = await restore_latest(bot, session)
         await callback.message.edit_text(
-            f"✅ Restore muvaffaqiyatli.\n\nBackup sanasi: {backup.created_at.strftime('%d.%m.%Y %H:%M UTC')}",
-            reply_markup=home_button(),
+            f"✅ Restore muvaffaqiyatli.\n\nBackup sanasi: {backup.created_at.strftime('%d.%m.%Y %H:%M UTC')}"
         )
     except Exception as e:  # noqa: BLE001
-        await callback.message.edit_text(f"❌ Restore muvaffaqiyatsiz: {e}", reply_markup=home_button())
+        await callback.message.edit_text(f"❌ Restore muvaffaqiyatsiz: {e}")
 
 
 @router.callback_query(RestoreConfirm.confirm, BackupCB.filter(F.action == "restore_no"))
 @safe_handler
 async def restore_cancelled(callback: CallbackQuery, state: FSMContext) -> None:
     await state.clear()
-    await callback.message.edit_text("❌ Restore bekor qilindi.", reply_markup=home_button())
+    await callback.message.edit_text("❌ Restore bekor qilindi.")
     await callback.answer()

@@ -14,6 +14,7 @@ from bot.handlers import (
     active,
     alerts,
     leverage,
+    menu,
     pending,
     recent_trades,
     reports,
@@ -36,6 +37,10 @@ def build_dispatcher() -> Dispatcher:
     dp.callback_query.middleware(DbSessionMiddleware())
 
     dp.include_router(start.router)
+    # menu.router is second (after start, which only handles /start + the
+    # inline "cancel" callback) but BEFORE every state-scoped flow router, so
+    # a bottom-menu tap always wins over a stuck FSM state elsewhere.
+    dp.include_router(menu.router)
     dp.include_router(trade_create.router)
     dp.include_router(pending.router)
     dp.include_router(active.router)
