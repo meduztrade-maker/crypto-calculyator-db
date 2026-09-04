@@ -7,6 +7,7 @@ import pytz
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
+from aiogram.types import MenuButtonWebApp, WebAppInfo
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 from bot.config import settings
@@ -96,6 +97,15 @@ def setup_scheduler(bot: Bot) -> AsyncIOScheduler:
 async def main() -> None:
     bot = Bot(token=settings.bot_token, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
     dp = build_dispatcher()
+
+    if settings.webapp_url:
+        try:
+            await bot.set_chat_menu_button(
+                menu_button=MenuButtonWebApp(text="MEDUZ App", web_app=WebAppInfo(url=settings.webapp_url))
+            )
+            logger.info("Chat menu button set to Mini App: %s", settings.webapp_url)
+        except Exception:  # noqa: BLE001
+            logger.exception("Could not set chat menu button (non-fatal)")
 
     scheduler = setup_scheduler(bot)
 

@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>MEDUZ Trading Journal</title>
+<link rel="stylesheet" href="/static/css/style.css">
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
+</head>
+<body>
+
+<div id="app">
+
+  <!-- ===== Top bar ===== -->
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-mark">MEDUZ</span>
+      <span class="brand-sub">TRADING JOURNAL</span>
+    </div>
+    <div id="userChip" class="user-chip"></div>
+  </header>
+
+  <!-- ===== Screens ===== -->
+  <main id="screens">
+
+    <!-- DASHBOARD -->
+    <section id="screen-dashboard" class="screen active">
+      <div class="hero-card">
+        <div class="hero-label">BUGUNGI NATIJA</div>
+        <div id="heroR" class="hero-r">+0R</div>
+        <div id="heroSub" class="hero-sub">0 trade · 0% win rate</div>
+      </div>
+
+      <div class="quick-grid">
+        <button class="quick-btn" data-action="add-trade">
+          <span class="qi">➕</span><span>Trade qo'shish</span>
+        </button>
+        <button class="quick-btn" data-nav="trades" data-sub="pending">
+          <span class="qi">⏳</span><span>Pending</span>
+          <span id="qPendingCount" class="qbadge">0</span>
+        </button>
+        <button class="quick-btn" data-nav="trades" data-sub="active">
+          <span class="qi">🟢</span><span>Active</span>
+          <span id="qActiveCount" class="qbadge">0</span>
+        </button>
+        <button class="quick-btn" data-nav="reports">
+          <span class="qi">📊</span><span>Hisobot</span>
+        </button>
+      </div>
+
+      <div id="dashAlerts" class="card-list"></div>
+    </section>
+
+    <!-- TRADES -->
+    <section id="screen-trades" class="screen">
+      <div class="segmented" id="tradesSegmented">
+        <button class="seg-btn active" data-sub="pending">Pending</button>
+        <button class="seg-btn" data-sub="active">Active</button>
+        <button class="seg-btn" data-sub="recent">Oxirgi</button>
+      </div>
+      <div id="tradesList" class="card-list"></div>
+    </section>
+
+    <!-- REPORTS -->
+    <section id="screen-reports" class="screen">
+      <div class="segmented" id="reportsSegmented">
+        <button class="seg-btn active" data-period="daily">Kunlik</button>
+        <button class="seg-btn" data-period="weekly">Haftalik</button>
+        <button class="seg-btn" data-period="custom">Davr</button>
+      </div>
+
+      <div id="customDateRow" class="custom-date-row hidden">
+        <input type="date" id="customStart" class="date-input">
+        <span class="date-sep">—</span>
+        <input type="date" id="customEnd" class="date-input">
+        <button id="customApply" class="btn-small">Ko'rsatish</button>
+      </div>
+
+      <div class="hero-card">
+        <div id="repLabel" class="hero-label">DAILY PERFORMANCE</div>
+        <div id="repR" class="hero-r">+0R</div>
+        <div class="streak-row">
+          <span id="repSub" class="hero-sub">0 trade · 0% win rate</span>
+          <span id="repStreak" class="streak-badge hidden"></span>
+        </div>
+      </div>
+
+      <div class="chart-card">
+        <div class="chart-card-title">EQUITY CURVE</div>
+        <canvas id="equityChart" height="180"></canvas>
+      </div>
+
+      <div class="stat-grid" id="statGrid"></div>
+
+      <div class="composition-bar-wrap">
+        <div class="composition-legend" id="compLegend"></div>
+        <div class="composition-bar" id="compBar"></div>
+      </div>
+
+      <div class="section-title">COINS</div>
+      <div id="coinsList" class="card-list"></div>
+    </section>
+
+    <!-- ALERTS -->
+    <section id="screen-alerts" class="screen">
+      <button class="primary-btn" id="addAlertBtn">➕ Yangi alert</button>
+      <div id="alertsList" class="card-list"></div>
+    </section>
+
+    <!-- SETTINGS -->
+    <section id="screen-settings" class="screen">
+      <div class="card">
+        <div class="card-row">
+          <span class="card-row-label">💵 Margin</span>
+          <span id="marginValue" class="card-row-value">$500</span>
+        </div>
+        <button class="btn-small full-w" id="changeMarginBtn">O'zgartirish</button>
+      </div>
+
+      <div id="adminPanel" class="card hidden">
+        <div class="section-title" style="margin-top:0">☁️ BACKUP (Admin)</div>
+        <div class="btn-row">
+          <button class="btn-small" id="backupNowBtn">Backup Now</button>
+          <button class="btn-small" id="backupLastBtn">Last Backup</button>
+        </div>
+        <button class="btn-small full-w danger" id="restoreBtn">🔄 Restore</button>
+        <div id="backupStatus" class="hint-text"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-row"><span class="card-row-label">Bot</span><span class="card-row-value">@Tradejournal1bot</span></div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ===== Bottom tab bar ===== -->
+  <nav class="tabbar">
+    <button class="tab active" data-nav="dashboard"><span class="tab-icon">🏠</span><span>Bosh sahifa</span></button>
+    <button class="tab" data-nav="trades"><span class="tab-icon">📋</span><span>Tradelar</span></button>
+    <button class="tab" data-nav="reports"><span class="tab-icon">📊</span><span>Hisobot</span></button>
+    <button class="tab" data-nav="alerts"><span class="tab-icon">🔔</span><span>Alert</span></button>
+    <button class="tab" data-nav="settings"><span class="tab-icon">⚙️</span><span>Sozlama</span></button>
+  </nav>
+
+</div>
+
+<!-- ===== Bottom sheet (modal) host ===== -->
+<div id="sheetBackdrop" class="sheet-backdrop"></div>
+<div id="sheet" class="sheet">
+  <div class="sheet-handle"></div>
+  <div id="sheetContent" class="sheet-content"></div>
+</div>
+
+<div id="toast" class="toast"></div>
+
+<script src="/static/js/app.js"></script>
+</body>
+</html>

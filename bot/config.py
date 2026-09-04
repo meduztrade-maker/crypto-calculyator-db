@@ -40,6 +40,7 @@ class Settings:
     backup_channel_id: int = field(default_factory=lambda: int(_require("BACKUP_CHANNEL_ID")))
     timezone: str = field(default_factory=lambda: os.getenv("TIMEZONE", "Asia/Tashkent"))
     default_margin: str = field(default_factory=lambda: os.getenv("DEFAULT_MARGIN", "500"))
+    webapp_url: str | None = field(default_factory=lambda: os.getenv("WEBAPP_URL") or None)
 
     # Backup retention policy (spec section 21)
     daily_backup_retention_days: int = 30

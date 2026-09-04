@@ -66,7 +66,7 @@ async def create_pending_trade(
     risk_percent: Decimal,
     entry_price: Decimal,
     stop_loss_price: Decimal,
-    opening_screenshot_file_id: str,
+    opening_screenshot_file_id: str | None = None,
 ) -> Trade:
     trade = Trade(
         user_id=user.id,
@@ -173,7 +173,7 @@ async def force_delete_trade(session: AsyncSession, user: User, trade_id: int) -
     await session.commit()
 
 
-async def close_trade_sl(session: AsyncSession, user: User, trade_id: int, closing_screenshot_file_id: str) -> Trade:
+async def close_trade_sl(session: AsyncSession, user: User, trade_id: int, closing_screenshot_file_id: str | None = None) -> Trade:
     trade = await get_user_trade(session, user, trade_id, lock=True)
     if trade is None or trade.status != TradeStatus.ACTIVE:
         raise TradeStateError("Trade is not active")
@@ -193,7 +193,7 @@ async def close_trade_with_rr(
     trade_id: int,
     result_type: ResultType,
     rr: Decimal,
-    closing_screenshot_file_id: str,
+    closing_screenshot_file_id: str | None = None,
 ) -> Trade:
     if result_type not in (ResultType.BU, ResultType.TP):
         raise ValueError("result_type must be BU or TP for this transition")
