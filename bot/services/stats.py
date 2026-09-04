@@ -66,6 +66,47 @@ class PeriodStats:
             cumulative.append(running)
         return cumulative
 
+    def chronological_trades(self) -> list[CoinResult]:
+        return list(reversed(self.coins))
+
+    def max_drawdown(self) -> Decimal:
+        """Largest peak-to-trough decline in cumulative R over the period."""
+        curve = self.equity_curve()
+        if not curve:
+            return Decimal("0")
+        running_peak = Decimal("0")  # curve starts implicitly from 0
+        max_dd = Decimal("0")
+        for v in curve:
+            if v > running_peak:
+                running_peak = v
+            dd = running_peak - v
+            if dd > max_dd:
+                max_dd = dd
+        return max_dd
+
+    def current_streak(self) -> tuple[str, int]:
+        """('win'|'loss'|'be'|'none', count) — the streak ending at the most recent closed trade."""
+        if not self.coins:
+            return ("none", 0)
+
+        def classify(c: CoinResult) -> str:
+            if c.result_type == "SL":
+                return "loss"
+            if c.result_rr and c.result_rr > 0:
+                return "win"
+            return "be"
+
+        kind = classify(self.coins[0])
+        if kind == "be":
+            return ("be", 1)
+        count = 0
+        for c in self.coins:
+            if classify(c) == kind:
+                count += 1
+            else:
+                break
+        return (kind, count)
+
 
 async def compute_period_stats(session: AsyncSession, user: User, start: datetime, end: datetime) -> PeriodStats:
     base_filter = (
