@@ -178,6 +178,23 @@ Bosh menyudagi **🔔 Alert** — coin nomi va maqsadli narxni kiritish orqali a
   holatiga o'tadi, qayta ishlamaydi).
 - **🔔 Alert → ❌ Bekor qilish** — istalgan faol alertni o'chirish mumkin.
 
+## 🖼 Hisobot rasmi (premium dashboard dizayni)
+
+`📊 Hisobot` bo'limida yaratiladigan PNG endi oddiy statistika kartasi emas — professional prop-firm/
+birja uslubidagi to'liq dashboard (Pillow bilan qo'lda chizilgan, tashqi chart kutubxonasiz):
+
+- **Equity curve** — davr ichidagi barcha yopilgan tradelarning kumulyativ R qiymati chiziq
+  grafik + gradient fon bilan (foyda bo'lsa yashil, zarar bo'lsa qizil), grid chiziqlar va R
+  qiymatlari bilan
+- 4 ta stat-chip: Win Rate, Average RR, **Profit Factor** (yangi — yutuqlar yig'indisi / zararlar
+  yig'indisi, faqat zarar bo'lmasa "∞"), Trades
+- Win/B-U/Loss taqsimoti — rangli progress-bar + legend
+- Coinlar ro'yxati — har birida rangli status-nuqta va o'ng tomonda natija badge'i
+- Barcha holatlar uchun tekshirildi: foydali davr, zararli davr (qizil equity curve), va bo'sh davr
+  (0 trade) — hech biri xato bermaydi
+
+Matnli hisobotga ham **Profit Factor** qatori qo'shildi.
+
 ## 🧪 Test natijalari
 
 Loyiha qurilishi davomida haqiqiy local PostgreSQL 16 instance ishga tushirilib, quyidagilar
@@ -205,6 +222,9 @@ tekshirildi:
 - ✅ Navigatsiya qayta qurilgandan keyin `Dispatcher` to'liq yig'ilishi va router tartibi
   (`menu` routeri `start`dan keyin, qolgan hamma state-bog'liq routerlardan oldin turishi) dastur
   ichida tekshirildi
+- ✅ Premium report rasm (equity curve, profit factor, win/loss bar) — real DB ma'lumoti bilan
+  (`compute_period_stats` → `render_report_image`) uchtadan holatda tekshirildi: foydali davr,
+  butunlay zararli davr, va 0 tradeli bo'sh davr — barchasi to'g'ri chiqdi
 
 ## ⚠️ Ma'lum cheklovlar
 

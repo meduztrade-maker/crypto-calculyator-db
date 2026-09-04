@@ -52,9 +52,19 @@ class PeriodStats:
     win_rate: Decimal = Decimal("0")
     total_r: Decimal = Decimal("0")
     average_rr: Decimal = Decimal("0")
+    profit_factor: Decimal | None = None  # None means "no losses" (undefined / infinite)
     best_trade: CoinResult | None = None
     worst_trade: CoinResult | None = None
     coins: list[CoinResult] = field(default_factory=list)
+
+    def equity_curve(self) -> list[Decimal]:
+        """Cumulative R in chronological order (self.coins is newest-first, so reverse it)."""
+        cumulative: list[Decimal] = []
+        running = Decimal("0")
+        for c in reversed(self.coins):
+            running += c.result_rr or Decimal("0")
+            cumulative.append(running)
+        return cumulative
 
 
 async def compute_period_stats(session: AsyncSession, user: User, start: datetime, end: datetime) -> PeriodStats:
@@ -125,6 +135,11 @@ async def compute_period_stats(session: AsyncSession, user: User, start: datetim
     coins_rows = (await session.execute(coins_stmt)).all()
     stats.coins = [CoinResult(r[0], r[1].value if r[1] else "-", r[2]) for r in coins_rows]
 
+    sum_pos = sum((c.result_rr for c in stats.coins if c.result_rr and c.result_rr > 0), Decimal("0"))
+    sum_neg_abs = sum((abs(c.result_rr) for c in stats.coins if c.result_rr and c.result_rr < 0), Decimal("0"))
+    if sum_neg_abs > 0:
+        stats.profit_factor = (sum_pos / sum_neg_abs).quantize(Decimal("0.01"))
+
     return stats
 
 
@@ -154,6 +169,7 @@ def format_text_report(title: str, stats: PeriodStats) -> str:
         f"Total: {'+' if stats.total_r >= 0 else ''}{dec_str(stats.total_r)}R",
         "",
         f"Average RR: {dec_str(stats.average_rr)}R",
+        f"Profit Factor: {dec_str(stats.profit_factor) if stats.profit_factor is not None else '∞'}",
     ]
     if stats.coins:
         lines.append("")
