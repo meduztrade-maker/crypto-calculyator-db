@@ -672,7 +672,12 @@ async function openAlertChartSheet(alert) {
       </div>
     </div>
     <div class="mini-chart-wrap">
-      <canvas id="alertChart"></canvas>
+      <div class="dchart" id="alertChart">
+        <div class="dchart-candles" id="dchartCandles"></div>
+        <div class="dchart-axis" id="dchartAxis"></div>
+        <div class="dchart-current" id="dchartCurrent"><span class="dchart-current-price" id="dchartCurrentPrice"></span></div>
+        <div class="dchart-alert" id="dchartAlert"><span class="dchart-alert-price" id="dchartAlertPrice"></span></div>
+      </div>
     </div>
     <div class="interval-row" id="intervalRow">
       <button class="pill small" data-int="15m">15m</button>
@@ -706,10 +711,9 @@ async function openAlertChartSheet(alert) {
   await loadAlertChartData(alert, interval);
 }
 
-/* ---- Alert detail: Chart.js line chart, live via Binance WebSocket
-   (falls back to REST polling every 8s if the socket can't connect —
-   some in-app browsers restrict raw WebSocket to arbitrary hosts). ---- */
-let alertChartInstance = null;
+/* ---- Alert detail: DOM-based candlestick chart (no canvas — avoids DPR
+   sizing bugs entirely), live via Binance WebSocket, falls back to REST
+   polling every 8s if the socket can't connect. ---- */
 let alertSocket = null;
 let alertPollTimer = null;
 
@@ -744,57 +748,108 @@ function formatPriceForChart(v) {
   return v.toLocaleString("en-US", { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
 }
 
-function renderAlertChart(closes, target, current) {
-  const canvas = document.getElementById("alertChart");
-  if (!canvas || typeof Chart === "undefined") return;
-  const isUp = target >= current;
-  const lineColor = isUp ? "#26c6b0" : "#ef6a5f";
-  const fillColor = isUp ? "rgba(38,198,176,0.15)" : "rgba(239,106,95,0.15)";
+function renderAlertChart(candles, target, current) {
+  const chartEl = document.getElementById("alertChart");
+  if (!chartEl) return;
+  const candlesEl = document.getElementById("dchartCandles");
+  const axisEl = document.getElementById("dchartAxis");
+  const currentEl = document.getElementById("dchartCurrent");
+  const currentPriceEl = document.getElementById("dchartCurrentPrice");
+  const alertEl = document.getElementById("dchartAlert");
+  const alertPriceEl = document.getElementById("dchartAlertPrice");
 
-  if (alertChartInstance) { alertChartInstance.destroy(); alertChartInstance = null; }
-  alertChartInstance = new Chart(canvas.getContext("2d"), {
-    type: "line",
-    data: {
-      labels: closes.map((_, i) => i),
-      datasets: [
-        { data: closes, borderColor: lineColor, backgroundColor: fillColor, borderWidth: 2, fill: true, tension: 0.25, pointRadius: 0 },
-        { data: closes.map(() => target), borderColor: "#8b96a5", borderDash: [5, 5], borderWidth: 1.5, pointRadius: 0, fill: false },
-      ],
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      animation: false,
-      plugins: { legend: { display: false }, tooltip: { enabled: false } },
-      scales: {
-        x: { display: false },
-        y: {
-          position: "right",
-          grid: { color: "rgba(139,150,165,0.12)" },
-          ticks: { color: "#6b7686", font: { size: 10 }, callback: (v) => formatPriceForChart(v), maxTicksLimit: 5 },
-        },
-      },
-    },
+  const h = chartEl.clientHeight || 170;
+  const axisW = 54;
+  const w = (chartEl.clientWidth || 320) - axisW;
+
+  // Y-axis scale comes from the REAL price action only (candle highs/lows +
+  // current tick) — a far-away alert target never stretches/flattens the
+  // chart. If the target falls outside this range, its line is clamped to
+  // the nearest edge with an arrow indicator instead.
+  const highs = candles.map((c) => n(c.h));
+  const lows = candles.map((c) => n(c.l));
+  const dataMin = Math.min(...lows, current);
+  const dataMax = Math.max(...highs, current);
+  const pad = (dataMax - dataMin) * 0.12 || Math.max(dataMax * 0.01, 1);
+  const minP = dataMin - pad, maxP = dataMax + pad;
+  const span = (maxP - minP) || 1;
+  const y = (price) => h - ((price - minP) / span) * h;
+
+  axisEl.innerHTML = "";
+  const steps = 4;
+  for (let i = 0; i <= steps; i++) {
+    const p = minP + (span * i) / steps;
+    const d = document.createElement("div");
+    d.className = "dchart-axis-label";
+    d.textContent = formatPriceForChart(p);
+    d.style.top = y(p) + "px";
+    axisEl.appendChild(d);
+  }
+
+  candlesEl.innerHTML = "";
+  const count = candles.length;
+  const slotW = w / count;
+  const bodyW = Math.max(Math.min(slotW * 0.6, 10), 2);
+  candles.forEach((c, i) => {
+    const o = n(c.o), hi = n(c.h), lo = n(c.l), cl = n(c.c);
+    const bull = cl >= o;
+    const cx = slotW * (i + 0.5);
+
+    const el = document.createElement("div");
+    el.className = "dchart-candle " + (bull ? "bull" : "bear");
+    el.style.left = (cx - bodyW / 2) + "px";
+    el.style.width = bodyW + "px";
+
+    const wick = document.createElement("div");
+    wick.className = "dchart-wick";
+    wick.style.left = (bodyW / 2 - 0.5) + "px";
+    wick.style.top = y(hi) + "px";
+    wick.style.height = Math.max(y(lo) - y(hi), 1) + "px";
+
+    const bodyTop = y(Math.max(o, cl));
+    const bodyBottom = y(Math.min(o, cl));
+    const body = document.createElement("div");
+    body.className = "dchart-body";
+    body.style.top = bodyTop + "px";
+    body.style.height = Math.max(bodyBottom - bodyTop, 1.5) + "px";
+
+    el.appendChild(wick);
+    el.appendChild(body);
+    candlesEl.appendChild(el);
   });
+
+  currentEl.style.top = y(current) + "px";
+  currentPriceEl.textContent = formatPriceForChart(current);
+
+  let alertY, edgeArrow = "";
+  if (target > maxP) { alertY = 3; edgeArrow = "▲ "; }
+  else if (target < minP) { alertY = h - 3; edgeArrow = "▼ "; }
+  else { alertY = y(target); }
+
+  const targetColor = target >= current ? "#26c6b0" : "#ef6a5f";
+  alertEl.style.top = alertY + "px";
+  alertEl.style.borderColor = targetColor;
+  alertPriceEl.style.background = targetColor;
+  alertPriceEl.textContent = edgeArrow + formatPriceForChart(target);
 }
 
 async function loadAlertChartData(alert, interval) {
   stopAlertLiveFeed();
   try {
     const data = await api(`/api/alerts/chart/${alert.coin}?interval=${interval}&limit=96`);
-    const closes = data.candles.map((c) => n(c.c));
     const target = n(alert.target_price);
     const current = n(data.current_price);
-    renderAlertChart(closes, target, current);
+    renderAlertChart(data.candles, target, current);
     updateAlertHeader(current, target);
-    startAlertLiveFeed(alert, interval, target);
+    startAlertLiveFeed(alert, interval, target, data.candles);
   } catch (e) {
     toast(e.message, "error");
   }
 }
 
-function startAlertLiveFeed(alert, interval, target) {
+function startAlertLiveFeed(alert, interval, target, initialCandles) {
   let connected = false;
+  let candles = initialCandles;
 
   const startPolling = () => {
     if (alertPollTimer) return;
@@ -802,13 +857,8 @@ function startAlertLiveFeed(alert, interval, target) {
     alertPollTimer = setInterval(async () => {
       try {
         const data = await api(`/api/alerts/chart/${alert.coin}?interval=${interval}&limit=96`);
-        const closes = data.candles.map((c) => n(c.c));
-        if (alertChartInstance) {
-          alertChartInstance.data.datasets[0].data = closes;
-          alertChartInstance.data.datasets[1].data = closes.map(() => target);
-          alertChartInstance.data.labels = closes.map((_, i) => i);
-          alertChartInstance.update("none");
-        }
+        candles = data.candles;
+        renderAlertChart(candles, target, n(data.current_price));
         updateAlertHeader(n(data.current_price), target);
       } catch (e) { /* silent */ }
     }, 8000);
@@ -828,18 +878,16 @@ function startAlertLiveFeed(alert, interval, target) {
       try {
         const msg = JSON.parse(ev.data);
         const k = msg.k;
-        if (!k || !alertChartInstance) return;
-        const close = parseFloat(k.c);
-        const ds0 = alertChartInstance.data.datasets[0].data;
+        if (!k || !candles.length) return;
+        const updated = { t: k.t, o: k.o, h: k.h, l: k.l, c: k.c };
         if (k.x) {
-          ds0.push(close);
-          if (ds0.length > 96) ds0.shift();
-          alertChartInstance.data.datasets[1].data = ds0.map(() => target);
-          alertChartInstance.data.labels = ds0.map((_, i) => i);
-        } else if (ds0.length) {
-          ds0[ds0.length - 1] = close;
+          candles = candles.concat([updated]);
+          if (candles.length > 96) candles = candles.slice(candles.length - 96);
+        } else {
+          candles = candles.slice(0, -1).concat([updated]);
         }
-        alertChartInstance.update("none");
+        const close = parseFloat(k.c);
+        renderAlertChart(candles, target, close);
         updateAlertHeader(close, target);
       } catch (e) { /* ignore malformed tick */ }
     };
