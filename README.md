@@ -195,6 +195,35 @@ birja uslubidagi to'liq dashboard (Pillow bilan qo'lda chizilgan, tashqi chart k
 
 Matnli hisobotga ham **Profit Factor** qatori qo'shildi.
 
+## 📱 MEDUZ Mini App
+
+Bot bilan bir qatorda, **to'liq Telegram Mini App** (`webapp/`) ham mavjud — alohida Railway
+service (`meduz-webapp`) sifatida deploy qilingan, xuddi shu PostgreSQL'ni bot bilan baham ko'radi
+va xuddi shu `bot/database/crud.py`, `bot/services/*` kodlarini qayta ishlatadi (mantiq ikki marta
+yozilmagan).
+
+- **Backend**: FastAPI (`webapp/main.py`) — Telegram WebApp `initData`'ni HMAC-SHA256 orqali
+  tekshiradi (Telegram'ning rasmiy algoritmi), trades/stats/leverage/alerts/settings uchun REST API.
+- **Frontend**: `webapp/static/` — build-step'siz vanilla JS SPA, Chart.js bilan **interaktiv**
+  equity curve (statik PNG emas), pastki tab-bar (Dashboard/Trades/Reports/Alerts/Settings), bottom
+  sheet'lar orqali trade qo'shish/yopish.
+- Botning o'zi **o'zgarmagan** — Mini App alohida, qo'shimcha interfeys sifatida ishlaydi. `/start`
+  bosilganda endi qo'shimcha "🚀 Mini App ochish" tugmasi ham chiqadi, va bot matn kiritish joyi
+  yonidagi doimiy menyu tugmasi ham Mini App'ni ochadigan qilib sozlangan
+  (`set_chat_menu_button`).
+- Screenshot yuklash: rasm to'g'ridan-to'g'ri foydalanuvchining bot bilan shaxsiy chatiga
+  yuboriladi (Bot API orqali) va qaytgan `file_id` DB'ga yoziladi — botning o'zida yaratilgan
+  trade'lar bilan bir xil formatda saqlanadi.
+
+**Yangi environment variable**: `WEBAPP_URL` — deploy qilingan Mini App'ning ochiq HTTPS manzili
+(masalan `https://meduz-webapp-production.up.railway.app`). Bo'sh qoldirilsa, "🚀 Mini App" tugmasi
+va menyu tugmasi shunchaki ko'rinmaydi — bot boshqa hech narsasiz ishlashda davom etadi.
+
+Mini App'ni Railway'da alohida service sifatida deploy qilish uchun `Procfile`'dagi `web:` processi
+ishlatiladi (`uvicorn webapp.main:app --host 0.0.0.0 --port $PORT`), bot esa xuddi avvalgidek
+`worker:` processida qoladi — ikkalasi bir xil repo'dan, bir xil Postgres'ga ulanib, mustaqil
+xizmat sifatida ishlaydi.
+
 ## 🧪 Test natijalari
 
 Loyiha qurilishi davomida haqiqiy local PostgreSQL 16 instance ishga tushirilib, quyidagilar
@@ -225,6 +254,14 @@ tekshirildi:
 - ✅ Premium report rasm (equity curve, profit factor, win/loss bar) — real DB ma'lumoti bilan
   (`compute_period_stats` → `render_report_image`) uchtadan holatda tekshirildi: foydali davr,
   butunlay zararli davr, va 0 tradeli bo'sh davr — barchasi to'g'ri chiqdi
+- ✅ **Mini App backend** — FastAPI `TestClient` + qo'lda imzolangan (HMAC-SHA256) Telegram
+  `initData` bilan real local PostgreSQL'ga qarshi to'liq tekshirildi: auth rad etish, trade
+  lifecycle (yaratish → activate → close), statistika, leverage calc, ikki user orasidagi
+  izolatsiya, admin-only endpoint'larga ruxsat cheklovi
+- ✅ **Mini App production'da deploy qilindi** — alohida Railway service (`meduz-webapp`),
+  o'ziga xos ochiq domen bilan, bot service'dan `WEBAPP_URL` orqali bog'langan; ikkala service
+  ham Postgres bilan birga "Online" holatda tasdiqlandi, bot loglarida "Chat menu button set to
+  Mini App" xabari ko'rindi
 
 ## ⚠️ Ma'lum cheklovlar
 
@@ -235,6 +272,10 @@ tekshirildi:
   only yoki Binance'da yo'q coinlar uchun xato beradi.
 - Group signal, real-time chart kabi funksiyalar ushbu texnik topshiriqda so'ralmagan, shuning uchun
   kiritilmagan.
+- Mini App HTTP darajasida (FastAPI TestClient, qo'lda imzolangan initData) va Railway production
+  muhitida (build/deploy/loglar) to'liq tekshirildi, lekin haqiqiy Telegram klient ichida (iOS/
+  Android/Desktop WebView) qo'lda bosib ko'rilmadi — birinchi ochilishda ekran o'lchami, klaviatura
+  xatti-harakati va fayl yuklashni sinab ko'rish tavsiya etiladi.
 
 ## 🚀 Kelgusi yaxshilanishlar
 
