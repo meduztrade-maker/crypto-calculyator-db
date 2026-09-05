@@ -247,6 +247,7 @@ main#screens { flex: 1; padding: 4px 16px calc(96px + var(--safe-bottom)); }
   background: var(--card-alt); border: 1px solid var(--border); border-radius: var(--radius-md);
   padding: 10px 6px; margin-bottom: 14px;
 }
+.mini-chart-wrap canvas { display: block; max-width: 100%; }
 .mini-chart-wrap.full-bleed { padding: 10px 0 6px; margin-left: -18px; margin-right: -18px; border-radius: 0; border-left: none; border-right: none; }
 .interval-row { display: flex; gap: 8px; margin-bottom: 16px; }
 .pill.small { padding: 6px 14px; font-size: 12.5px; }

@@ -754,6 +754,8 @@ function drawCandlestickChart(canvas, candles, targetPrice, currentPrice) {
   const dpr = window.devicePixelRatio || 1;
   const cssWidth = canvas.clientWidth || 320;
   const cssHeight = parseInt(canvas.getAttribute("height"), 10) || 260;
+  canvas.style.width = cssWidth + "px";
+  canvas.style.height = cssHeight + "px";
   canvas.width = Math.round(cssWidth * dpr);
   canvas.height = Math.round(cssHeight * dpr);
   const ctx = canvas.getContext("2d");
