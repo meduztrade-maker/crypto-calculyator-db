@@ -662,15 +662,20 @@ async function loadAlerts() {
 
 async function openAlertChartSheet(alert) {
   const isUp = alert.direction === "ABOVE";
+  const dirColor = isUp ? "#26c6b0" : "#ef6a5f";
   openSheet(`
-    <div class="sheet-title">${isUp ? "⬆️" : "⬇️"} ${alert.coin}</div>
-    <div class="alert-live-price" id="alertLivePrice">…</div>
-    <div class="alert-target-row">
-      <span class="alert-target-dot" style="background:${isUp ? "#2ecc71" : "#ef4444"}"></span>
-      Alert: ${fmtDec(alert.target_price)}
+    <div class="chart-header">
+      <div>
+        <div class="chart-header-coin">${alert.coin}</div>
+        <div class="chart-header-dir" style="color:${dirColor}">${isUp ? "▲ ABOVE" : "▼ BELOW"} <span id="intervalLabel">1s</span></div>
+      </div>
+      <div class="chart-header-right">
+        <div class="chart-header-pct" id="alertPct" style="color:${dirColor}">…</div>
+        <div class="chart-header-price" id="alertLivePrice">…</div>
+      </div>
     </div>
-    <div class="mini-chart-wrap">
-      <canvas id="alertChart" height="190"></canvas>
+    <div class="mini-chart-wrap full-bleed">
+      <canvas id="alertChart" height="260"></canvas>
     </div>
     <div class="interval-row" id="intervalRow">
       <button class="pill small" data-int="15m">15m</button>
@@ -690,11 +695,13 @@ async function openAlertChartSheet(alert) {
   });
 
   let interval = "1h";
+  const intervalLabels = { "15m": "15m", "1h": "1s", "4h": "4s", "1d": "1k" };
   sheetContent.querySelectorAll("#intervalRow .pill").forEach((p) => {
     p.addEventListener("click", () => {
       sheetContent.querySelectorAll("#intervalRow .pill").forEach((x) => x.classList.remove("selected"));
       p.classList.add("selected");
       interval = p.dataset.int;
+      document.getElementById("intervalLabel").textContent = intervalLabels[interval];
       refreshAlertChart(alert, interval);
     });
   });
@@ -708,12 +715,18 @@ async function openAlertChartSheet(alert) {
 async function refreshAlertChart(alert, interval) {
   try {
     const data = await api(`/api/alerts/chart/${alert.coin}?interval=${interval}&limit=96`);
+    const current = n(data.current_price);
+    const target = n(alert.target_price);
+    const pct = current !== 0 ? ((target - current) / current) * 100 : 0;
+
     const priceEl = document.getElementById("alertLivePrice");
-    if (priceEl) priceEl.textContent = fmtDec(data.current_price);
+    if (priceEl) priceEl.textContent = formatPriceForChart(current);
+    const pctEl = document.getElementById("alertPct");
+    if (pctEl) pctEl.textContent = `${pct >= 0 ? "+" : ""}${pct.toFixed(2)}% to target`;
 
     const canvas = document.getElementById("alertChart");
     if (!canvas) return;
-    drawCandlestickChart(canvas, data.candles, n(alert.target_price));
+    drawCandlestickChart(canvas, data.candles, target, current);
   } catch (e) {
     /* silent — a transient price-feed hiccup shouldn't spam toasts every 8s */
   }
@@ -722,9 +735,8 @@ async function refreshAlertChart(alert, interval) {
 /* Minimalist hand-drawn candlestick chart (no external chart lib needed) —
    bullish = lavender/purple, bearish = black w/ a thin outline so it still
    reads against the dark app background, matching the requested palette. */
-const CANDLE_BULL = "#c9a9f7";
-const CANDLE_BEAR = "#0a0a0a";
-const CANDLE_BEAR_OUTLINE = "#4a4a55";
+const CANDLE_BULL = "#26c6b0";
+const CANDLE_BEAR = "#ef6a5f";
 
 function formatPriceForChart(v) {
   const abs = Math.abs(v);
@@ -737,11 +749,11 @@ function formatPriceForChart(v) {
   return v.toLocaleString("en-US", { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
 }
 
-function drawCandlestickChart(canvas, candles, targetPrice) {
+function drawCandlestickChart(canvas, candles, targetPrice, currentPrice) {
   if (!candles || candles.length === 0) return;
   const dpr = window.devicePixelRatio || 1;
   const cssWidth = canvas.clientWidth || 320;
-  const cssHeight = parseInt(canvas.getAttribute("height"), 10) || 190;
+  const cssHeight = parseInt(canvas.getAttribute("height"), 10) || 260;
   canvas.width = Math.round(cssWidth * dpr);
   canvas.height = Math.round(cssHeight * dpr);
   const ctx = canvas.getContext("2d");
@@ -750,56 +762,43 @@ function drawCandlestickChart(canvas, candles, targetPrice) {
 
   const highs = candles.map((c) => n(c.h));
   const lows = candles.map((c) => n(c.l));
-  const lastClose = n(candles[candles.length - 1].c);
-  const firstOpen = n(candles[0].o);
-  let vmax = Math.max(...highs, targetPrice);
-  let vmin = Math.min(...lows, targetPrice);
-  const pad = (vmax - vmin) * 0.12 || Math.max(vmax * 0.01, 1);
+  const current = currentPrice !== undefined ? currentPrice : n(candles[candles.length - 1].c);
+  let vmax = Math.max(...highs, targetPrice, current);
+  let vmin = Math.min(...lows, targetPrice, current);
+  const pad = (vmax - vmin) * 0.14 || Math.max(vmax * 0.01, 1);
   vmax += pad; vmin -= pad;
   const span = (vmax - vmin) || 1;
 
-  const axisFont = "10px -apple-system, sans-serif";
+  const axisFont = "12px -apple-system, sans-serif";
   ctx.font = axisFont;
-  const axisW = Math.max(ctx.measureText(formatPriceForChart(vmax)).width, ctx.measureText(formatPriceForChart(vmin)).width) + 12;
+  const axisW = Math.max(ctx.measureText(formatPriceForChart(vmax)).width, ctx.measureText(formatPriceForChart(vmin)).width) + 16;
 
-  const padX = 4, padY = 10;
+  const padX = 2, padY = 14;
   const chartW = cssWidth - padX * 2 - axisW;
   const chartH = cssHeight - padY * 2;
   const count = candles.length;
   const slotW = chartW / count;
-  const bodyW = Math.max(Math.min(slotW * 0.62, 9), 1.5);
+  const bodyW = Math.max(Math.min(slotW * 0.68, 14), 2);
 
   const yFor = (v) => padY + chartH - ((v - vmin) / span) * chartH;
 
-  // Horizontal gridlines + small price labels (right axis), CoinMarketCap-style
-  const gridLevels = 4;
+  // Horizontal gridlines + price labels (right axis)
+  const gridLevels = 5;
   ctx.textBaseline = "middle";
   ctx.textAlign = "left";
   for (let i = 0; i <= gridLevels; i++) {
     const gv = vmin + (span * i) / gridLevels;
     const gy = yFor(gv);
-    ctx.strokeStyle = "rgba(139,150,165,0.12)";
+    ctx.strokeStyle = "rgba(139,150,165,0.14)";
     ctx.lineWidth = 1;
     ctx.beginPath();
     ctx.moveTo(padX, gy);
     ctx.lineTo(padX + chartW, gy);
     ctx.stroke();
-    ctx.fillStyle = "#5b6472";
+    ctx.fillStyle = "#6b7686";
     ctx.font = axisFont;
-    ctx.fillText(formatPriceForChart(gv), padX + chartW + 6, gy);
+    ctx.fillText(formatPriceForChart(gv), padX + chartW + 8, gy);
   }
-
-  // Target reference line (dashed) + label
-  ctx.setLineDash([4, 4]);
-  ctx.strokeStyle = "#8b96a5";
-  ctx.lineWidth = 1;
-  const ty = yFor(targetPrice);
-  ctx.beginPath();
-  ctx.moveTo(padX, ty);
-  ctx.lineTo(padX + chartW, ty);
-  ctx.stroke();
-  ctx.setLineDash([]);
-  drawPricePill(ctx, padX + chartW + 6, ty, formatPriceForChart(targetPrice), "#2a3140", "#c7d0dc");
 
   // Candles
   candles.forEach((c, i) => {
@@ -809,7 +808,7 @@ function drawCandlestickChart(canvas, candles, targetPrice) {
     const color = bull ? CANDLE_BULL : CANDLE_BEAR;
 
     ctx.strokeStyle = color;
-    ctx.lineWidth = 1;
+    ctx.lineWidth = 1.3;
     ctx.beginPath();
     ctx.moveTo(cx, yFor(h));
     ctx.lineTo(cx, yFor(l));
@@ -817,41 +816,48 @@ function drawCandlestickChart(canvas, candles, targetPrice) {
 
     const yTop = yFor(Math.max(o, cl));
     const yBot = yFor(Math.min(o, cl));
-    const bodyH = Math.max(yBot - yTop, 1);
+    const bodyH = Math.max(yBot - yTop, 1.5);
     ctx.fillStyle = color;
     ctx.fillRect(cx - bodyW / 2, yTop, bodyW, bodyH);
-    if (!bull) {
-      ctx.strokeStyle = CANDLE_BEAR_OUTLINE;
-      ctx.lineWidth = 1;
-      ctx.strokeRect(cx - bodyW / 2 + 0.5, yTop + 0.5, bodyW - 1, Math.max(bodyH - 1, 1));
-    }
   });
 
-  // Current price pill (right axis), colored by period change like CoinMarketCap
-  const periodUp = lastClose >= firstOpen;
-  const priceColor = periodUp ? "#2ecc71" : "#ef4444";
-  const priceBg = periodUp ? "rgba(46,204,113,0.18)" : "rgba(239,68,68,0.18)";
-  const py = yFor(lastClose);
-  ctx.setLineDash([2, 3]);
-  ctx.strokeStyle = priceColor;
+  // Target reference line — dotted, colored by direction, labeled
+  const targetUp = targetPrice >= current;
+  const targetColor = targetUp ? CANDLE_BULL : CANDLE_BEAR;
+  ctx.setLineDash([1, 4]);
+  ctx.lineCap = "round";
+  ctx.strokeStyle = targetColor;
+  ctx.lineWidth = 1.5;
+  const ty = yFor(targetPrice);
+  ctx.beginPath();
+  ctx.moveTo(padX, ty);
+  ctx.lineTo(padX + chartW, ty);
+  ctx.stroke();
+  ctx.setLineDash([]);
+  drawPricePill(ctx, padX + chartW + 8, ty, formatPriceForChart(targetPrice), targetColor, "#06120f");
+
+  // Current price reference — thin dashed neutral line, labeled
+  ctx.setLineDash([6, 4]);
+  ctx.strokeStyle = "#c7d0dc";
   ctx.lineWidth = 1;
+  const py = yFor(current);
   ctx.beginPath();
   ctx.moveTo(padX, py);
   ctx.lineTo(padX + chartW, py);
   ctx.stroke();
   ctx.setLineDash([]);
-  drawPricePill(ctx, padX + chartW + 6, py, formatPriceForChart(lastClose), priceBg, priceColor);
+  drawPricePill(ctx, padX + chartW + 8, py, formatPriceForChart(current), "#2a3140", "#e7edf3");
 }
 
 function drawPricePill(ctx, x, y, text, bg, fg) {
-  ctx.font = "10px -apple-system, sans-serif";
+  ctx.font = "700 12px -apple-system, sans-serif";
   const tw = ctx.measureText(text).width;
-  const w = tw + 10, h = 15;
+  const w = tw + 12, h = 19;
   let yy = y - h / 2;
   ctx.fillStyle = bg;
   if (ctx.roundRect) {
     ctx.beginPath();
-    ctx.roundRect(x, yy, w, h, 4);
+    ctx.roundRect(x, yy, w, h, 5);
     ctx.fill();
   } else {
     ctx.fillRect(x, yy, w, h);
@@ -859,7 +865,7 @@ function drawPricePill(ctx, x, y, text, bg, fg) {
   ctx.fillStyle = fg;
   ctx.textAlign = "left";
   ctx.textBaseline = "middle";
-  ctx.fillText(text, x + 5, y + 0.5);
+  ctx.fillText(text, x + 6, y + 0.5);
 }
 
 document.getElementById("addAlertBtn").addEventListener("click", () => {
