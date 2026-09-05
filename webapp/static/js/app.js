@@ -670,7 +670,7 @@ async function openAlertChartSheet(alert) {
       Alert: ${fmtDec(alert.target_price)}
     </div>
     <div class="mini-chart-wrap">
-      <canvas id="alertChart" height="160"></canvas>
+      <canvas id="alertChart" height="190"></canvas>
     </div>
     <div class="interval-row" id="intervalRow">
       <button class="pill small" data-int="15m">15m</button>
@@ -726,11 +726,22 @@ const CANDLE_BULL = "#c9a9f7";
 const CANDLE_BEAR = "#0a0a0a";
 const CANDLE_BEAR_OUTLINE = "#4a4a55";
 
+function formatPriceForChart(v) {
+  const abs = Math.abs(v);
+  let decimals = 2;
+  if (abs >= 1000) decimals = 0;
+  else if (abs >= 100) decimals = 1;
+  else if (abs >= 1) decimals = 2;
+  else if (abs >= 0.01) decimals = 4;
+  else decimals = 6;
+  return v.toLocaleString("en-US", { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+}
+
 function drawCandlestickChart(canvas, candles, targetPrice) {
   if (!candles || candles.length === 0) return;
   const dpr = window.devicePixelRatio || 1;
   const cssWidth = canvas.clientWidth || 320;
-  const cssHeight = parseInt(canvas.getAttribute("height"), 10) || 160;
+  const cssHeight = parseInt(canvas.getAttribute("height"), 10) || 190;
   canvas.width = Math.round(cssWidth * dpr);
   canvas.height = Math.round(cssHeight * dpr);
   const ctx = canvas.getContext("2d");
@@ -739,14 +750,20 @@ function drawCandlestickChart(canvas, candles, targetPrice) {
 
   const highs = candles.map((c) => n(c.h));
   const lows = candles.map((c) => n(c.l));
+  const lastClose = n(candles[candles.length - 1].c);
+  const firstOpen = n(candles[0].o);
   let vmax = Math.max(...highs, targetPrice);
   let vmin = Math.min(...lows, targetPrice);
-  const pad = (vmax - vmin) * 0.1 || Math.max(vmax * 0.01, 1);
+  const pad = (vmax - vmin) * 0.12 || Math.max(vmax * 0.01, 1);
   vmax += pad; vmin -= pad;
   const span = (vmax - vmin) || 1;
 
-  const padX = 4, padY = 6;
-  const chartW = cssWidth - padX * 2;
+  const axisFont = "10px -apple-system, sans-serif";
+  ctx.font = axisFont;
+  const axisW = Math.max(ctx.measureText(formatPriceForChart(vmax)).width, ctx.measureText(formatPriceForChart(vmin)).width) + 12;
+
+  const padX = 4, padY = 10;
+  const chartW = cssWidth - padX * 2 - axisW;
   const chartH = cssHeight - padY * 2;
   const count = candles.length;
   const slotW = chartW / count;
@@ -754,17 +771,37 @@ function drawCandlestickChart(canvas, candles, targetPrice) {
 
   const yFor = (v) => padY + chartH - ((v - vmin) / span) * chartH;
 
-  // Target reference line (dashed)
+  // Horizontal gridlines + small price labels (right axis), CoinMarketCap-style
+  const gridLevels = 4;
+  ctx.textBaseline = "middle";
+  ctx.textAlign = "left";
+  for (let i = 0; i <= gridLevels; i++) {
+    const gv = vmin + (span * i) / gridLevels;
+    const gy = yFor(gv);
+    ctx.strokeStyle = "rgba(139,150,165,0.12)";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(padX, gy);
+    ctx.lineTo(padX + chartW, gy);
+    ctx.stroke();
+    ctx.fillStyle = "#5b6472";
+    ctx.font = axisFont;
+    ctx.fillText(formatPriceForChart(gv), padX + chartW + 6, gy);
+  }
+
+  // Target reference line (dashed) + label
   ctx.setLineDash([4, 4]);
-  ctx.strokeStyle = "#5b6472";
+  ctx.strokeStyle = "#8b96a5";
   ctx.lineWidth = 1;
   const ty = yFor(targetPrice);
   ctx.beginPath();
   ctx.moveTo(padX, ty);
-  ctx.lineTo(cssWidth - padX, ty);
+  ctx.lineTo(padX + chartW, ty);
   ctx.stroke();
   ctx.setLineDash([]);
+  drawPricePill(ctx, padX + chartW + 6, ty, formatPriceForChart(targetPrice), "#2a3140", "#c7d0dc");
 
+  // Candles
   candles.forEach((c, i) => {
     const o = n(c.o), h = n(c.h), l = n(c.l), cl = n(c.c);
     const cx = padX + slotW * (i + 0.5);
@@ -789,6 +826,40 @@ function drawCandlestickChart(canvas, candles, targetPrice) {
       ctx.strokeRect(cx - bodyW / 2 + 0.5, yTop + 0.5, bodyW - 1, Math.max(bodyH - 1, 1));
     }
   });
+
+  // Current price pill (right axis), colored by period change like CoinMarketCap
+  const periodUp = lastClose >= firstOpen;
+  const priceColor = periodUp ? "#2ecc71" : "#ef4444";
+  const priceBg = periodUp ? "rgba(46,204,113,0.18)" : "rgba(239,68,68,0.18)";
+  const py = yFor(lastClose);
+  ctx.setLineDash([2, 3]);
+  ctx.strokeStyle = priceColor;
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(padX, py);
+  ctx.lineTo(padX + chartW, py);
+  ctx.stroke();
+  ctx.setLineDash([]);
+  drawPricePill(ctx, padX + chartW + 6, py, formatPriceForChart(lastClose), priceBg, priceColor);
+}
+
+function drawPricePill(ctx, x, y, text, bg, fg) {
+  ctx.font = "10px -apple-system, sans-serif";
+  const tw = ctx.measureText(text).width;
+  const w = tw + 10, h = 15;
+  let yy = y - h / 2;
+  ctx.fillStyle = bg;
+  if (ctx.roundRect) {
+    ctx.beginPath();
+    ctx.roundRect(x, yy, w, h, 4);
+    ctx.fill();
+  } else {
+    ctx.fillRect(x, yy, w, h);
+  }
+  ctx.fillStyle = fg;
+  ctx.textAlign = "left";
+  ctx.textBaseline = "middle";
+  ctx.fillText(text, x + 5, y + 0.5);
 }
 
 document.getElementById("addAlertBtn").addEventListener("click", () => {
