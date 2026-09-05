@@ -659,7 +659,6 @@ async function loadAlerts() {
 }
 
 /* ---- Alert detail: live minimalist price chart ---- */
-let alertChartInstance = null;
 
 async function openAlertChartSheet(alert) {
   const isUp = alert.direction === "ABOVE";
@@ -701,6 +700,7 @@ async function openAlertChartSheet(alert) {
   });
 
   await refreshAlertChart(alert, interval);
+  requestAnimationFrame(() => refreshAlertChart(alert, interval)); // re-measure once layout has settled
   clearInterval(activeInterval);
   activeInterval = setInterval(() => refreshAlertChart(alert, interval), 8000);
 }
@@ -712,51 +712,83 @@ async function refreshAlertChart(alert, interval) {
     if (priceEl) priceEl.textContent = fmtDec(data.current_price);
 
     const canvas = document.getElementById("alertChart");
-    if (!canvas || typeof Chart === "undefined") return;
-
-    const closes = data.candles.map((c) => n(c.c));
-    const target = n(alert.target_price);
-    const isUp = alert.direction === "ABOVE";
-    const lineColor = isUp ? "#2ecc71" : "#ef4444";
-
-    if (alertChartInstance) { alertChartInstance.destroy(); alertChartInstance = null; }
-    alertChartInstance = new Chart(canvas.getContext("2d"), {
-      type: "line",
-      data: {
-        labels: closes.map((_, i) => i),
-        datasets: [
-          {
-            data: closes,
-            borderColor: lineColor,
-            borderWidth: 2,
-            fill: false,
-            tension: 0.3,
-            pointRadius: 0,
-          },
-          {
-            data: closes.map(() => target),
-            borderColor: "#8b96a5",
-            borderWidth: 1.5,
-            borderDash: [5, 5],
-            pointRadius: 0,
-            fill: false,
-          },
-        ],
-      },
-      options: {
-        responsive: true,
-        animation: false,
-        plugins: { legend: { display: false }, tooltip: { enabled: false } },
-        scales: {
-          x: { display: false },
-          y: { display: false },
-        },
-        elements: { line: { capBezierPoints: true } },
-      },
-    });
+    if (!canvas) return;
+    drawCandlestickChart(canvas, data.candles, n(alert.target_price));
   } catch (e) {
     /* silent — a transient price-feed hiccup shouldn't spam toasts every 8s */
   }
+}
+
+/* Minimalist hand-drawn candlestick chart (no external chart lib needed) —
+   bullish = lavender/purple, bearish = black w/ a thin outline so it still
+   reads against the dark app background, matching the requested palette. */
+const CANDLE_BULL = "#c9a9f7";
+const CANDLE_BEAR = "#0a0a0a";
+const CANDLE_BEAR_OUTLINE = "#4a4a55";
+
+function drawCandlestickChart(canvas, candles, targetPrice) {
+  if (!candles || candles.length === 0) return;
+  const dpr = window.devicePixelRatio || 1;
+  const cssWidth = canvas.clientWidth || 320;
+  const cssHeight = parseInt(canvas.getAttribute("height"), 10) || 160;
+  canvas.width = Math.round(cssWidth * dpr);
+  canvas.height = Math.round(cssHeight * dpr);
+  const ctx = canvas.getContext("2d");
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, cssWidth, cssHeight);
+
+  const highs = candles.map((c) => n(c.h));
+  const lows = candles.map((c) => n(c.l));
+  let vmax = Math.max(...highs, targetPrice);
+  let vmin = Math.min(...lows, targetPrice);
+  const pad = (vmax - vmin) * 0.1 || Math.max(vmax * 0.01, 1);
+  vmax += pad; vmin -= pad;
+  const span = (vmax - vmin) || 1;
+
+  const padX = 4, padY = 6;
+  const chartW = cssWidth - padX * 2;
+  const chartH = cssHeight - padY * 2;
+  const count = candles.length;
+  const slotW = chartW / count;
+  const bodyW = Math.max(Math.min(slotW * 0.62, 9), 1.5);
+
+  const yFor = (v) => padY + chartH - ((v - vmin) / span) * chartH;
+
+  // Target reference line (dashed)
+  ctx.setLineDash([4, 4]);
+  ctx.strokeStyle = "#5b6472";
+  ctx.lineWidth = 1;
+  const ty = yFor(targetPrice);
+  ctx.beginPath();
+  ctx.moveTo(padX, ty);
+  ctx.lineTo(cssWidth - padX, ty);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  candles.forEach((c, i) => {
+    const o = n(c.o), h = n(c.h), l = n(c.l), cl = n(c.c);
+    const cx = padX + slotW * (i + 0.5);
+    const bull = cl >= o;
+    const color = bull ? CANDLE_BULL : CANDLE_BEAR;
+
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(cx, yFor(h));
+    ctx.lineTo(cx, yFor(l));
+    ctx.stroke();
+
+    const yTop = yFor(Math.max(o, cl));
+    const yBot = yFor(Math.min(o, cl));
+    const bodyH = Math.max(yBot - yTop, 1);
+    ctx.fillStyle = color;
+    ctx.fillRect(cx - bodyW / 2, yTop, bodyW, bodyH);
+    if (!bull) {
+      ctx.strokeStyle = CANDLE_BEAR_OUTLINE;
+      ctx.lineWidth = 1;
+      ctx.strokeRect(cx - bodyW / 2 + 0.5, yTop + 0.5, bodyW - 1, Math.max(bodyH - 1, 1));
+    }
+  });
 }
 
 document.getElementById("addAlertBtn").addEventListener("click", () => {

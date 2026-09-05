@@ -55,8 +55,8 @@ _KLINES_URL = "https://api.binance.com/api/v3/klines"
 
 async def get_klines(symbol: str, interval: str = "15m", limit: int = 96) -> list[dict]:
     """
-    Recent candles for a lightweight price chart — [{t: close_time_ms, c: close_price}, ...],
-    oldest first. Used by the Mini App's alert detail chart.
+    Recent OHLC candles for the Mini App's candlestick chart —
+    [{t, o, h, l, c}, ...], oldest first.
     """
     symbol = symbol.strip().upper()
     async with aiohttp.ClientSession(timeout=_TIMEOUT) as http:
@@ -68,7 +68,13 @@ async def get_klines(symbol: str, interval: str = "15m", limit: int = 96) -> lis
     out = []
     for row in data:
         try:
-            out.append({"t": int(row[6]), "c": str(Decimal(row[4]))})  # close_time, close price
+            out.append({
+                "t": int(row[6]),
+                "o": str(Decimal(row[1])),
+                "h": str(Decimal(row[2])),
+                "l": str(Decimal(row[3])),
+                "c": str(Decimal(row[4])),
+            })
         except (IndexError, InvalidOperation):
             continue
     return out
