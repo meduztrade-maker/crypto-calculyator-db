@@ -674,8 +674,8 @@ async function openAlertChartSheet(alert) {
         <div class="chart-header-price" id="alertLivePrice">…</div>
       </div>
     </div>
-    <div class="mini-chart-wrap full-bleed">
-      <canvas id="alertChart" height="260"></canvas>
+    <div class="mini-chart-wrap">
+      <canvas id="alertChart" height="150"></canvas>
     </div>
     <div class="interval-row" id="intervalRow">
       <button class="pill small" data-int="15m">15m</button>
@@ -769,16 +769,16 @@ function drawCandlestickChart(canvas, candles, targetPrice, currentPrice) {
   vmax += pad; vmin -= pad;
   const span = (vmax - vmin) || 1;
 
-  const axisFont = "12px -apple-system, sans-serif";
+  const axisFont = "10px -apple-system, sans-serif";
   ctx.font = axisFont;
   const axisW = Math.max(ctx.measureText(formatPriceForChart(vmax)).width, ctx.measureText(formatPriceForChart(vmin)).width) + 16;
 
-  const padX = 2, padY = 14;
+  const padX = 2, padY = 8;
   const chartW = cssWidth - padX * 2 - axisW;
   const chartH = cssHeight - padY * 2;
   const count = candles.length;
   const slotW = chartW / count;
-  const bodyW = Math.max(Math.min(slotW * 0.68, 14), 2);
+  const bodyW = Math.max(Math.min(slotW * 0.62, 8), 1.5);
 
   const yFor = (v) => padY + chartH - ((v - vmin) / span) * chartH;
 
@@ -850,9 +850,9 @@ function drawCandlestickChart(canvas, candles, targetPrice, currentPrice) {
 }
 
 function drawPricePill(ctx, x, y, text, bg, fg) {
-  ctx.font = "700 12px -apple-system, sans-serif";
+  ctx.font = "700 10px -apple-system, sans-serif";
   const tw = ctx.measureText(text).width;
-  const w = tw + 12, h = 19;
+  const w = tw + 8, h = 15;
   let yy = y - h / 2;
   ctx.fillStyle = bg;
   if (ctx.roundRect) {
@@ -865,7 +865,7 @@ function drawPricePill(ctx, x, y, text, bg, fg) {
   ctx.fillStyle = fg;
   ctx.textAlign = "left";
   ctx.textBaseline = "middle";
-  ctx.fillText(text, x + 6, y + 0.5);
+  ctx.fillText(text, x + 4, y + 0.5);
 }
 
 document.getElementById("addAlertBtn").addEventListener("click", () => {
