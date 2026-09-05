@@ -514,7 +514,15 @@ function renderReport(stats) {
   }
 
   // Equity curve chart
-  const ctx = document.getElementById("equityChart").getContext("2d");
+  const equityCanvas = document.getElementById("equityChart");
+  if (typeof Chart === "undefined") {
+    if (equityCanvas) {
+      equityCanvas.replaceWith(
+        Object.assign(document.createElement("div"), { className: "empty-state", textContent: "Grafik yuklanmadi" })
+      );
+    }
+  } else {
+  const ctx = equityCanvas.getContext("2d");
   const values = [0, ...stats.equity_curve.map(n)];
   const positive = values[values.length - 1] >= 0;
   const lineColor = positive ? "#2ecc71" : "#ef4444";
@@ -548,6 +556,7 @@ function renderReport(stats) {
       },
     },
   });
+  }
 
   // Stat chips
   const pf = stats.profit_factor !== null && stats.profit_factor !== undefined ? fmtDec(stats.profit_factor) : "∞";
