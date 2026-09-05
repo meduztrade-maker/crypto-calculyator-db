@@ -245,10 +245,14 @@ main#screens { flex: 1; padding: 4px 16px calc(96px + var(--safe-bottom)); }
 .chart-header-price { font-size: 12.5px; color: var(--text-dim); margin-top: 2px; }
 .mini-chart-wrap {
   background: var(--card-alt); border: 1px solid var(--border); border-radius: var(--radius-md);
-  padding: 10px 6px; margin-bottom: 14px;
+  padding: 10px 6px; margin-bottom: 14px; height: 170px; position: relative;
 }
 .mini-chart-wrap canvas { display: block; max-width: 100%; }
-.mini-chart-wrap.full-bleed { padding: 10px 0 6px; margin-left: -18px; margin-right: -18px; border-radius: 0; border-left: none; border-right: none; }
+.live-dot {
+  display: inline-block; width: 6px; height: 6px; border-radius: 50%;
+  background: var(--text-faint); margin-left: 4px; vertical-align: middle;
+}
+.live-dot.on { background: #26c6b0; box-shadow: 0 0 0 2px rgba(38,198,176,0.25); }
 .interval-row { display: flex; gap: 8px; margin-bottom: 16px; }
 .pill.small { padding: 6px 14px; font-size: 12.5px; }
 

@@ -74,18 +74,15 @@ function haptic(style = "light") {
 const sheetEl = document.getElementById("sheet");
 const sheetBackdrop = document.getElementById("sheetBackdrop");
 const sheetContent = document.getElementById("sheetContent");
-let activeInterval = null;
 
 function openSheet(html) {
-  clearInterval(activeInterval);
-  activeInterval = null;
+  stopAlertLiveFeed();
   sheetContent.innerHTML = html;
   sheetEl.classList.add("open");
   sheetBackdrop.classList.add("open");
 }
 function closeSheet() {
-  clearInterval(activeInterval);
-  activeInterval = null;
+  stopAlertLiveFeed();
   sheetEl.classList.remove("open");
   sheetBackdrop.classList.remove("open");
   setTimeout(() => { sheetContent.innerHTML = ""; }, 200);
@@ -667,7 +664,7 @@ async function openAlertChartSheet(alert) {
     <div class="chart-header">
       <div>
         <div class="chart-header-coin">${alert.coin}</div>
-        <div class="chart-header-dir" style="color:${dirColor}">${isUp ? "▲ ABOVE" : "▼ BELOW"} <span id="intervalLabel">1s</span></div>
+        <div class="chart-header-dir" style="color:${dirColor}">${isUp ? "▲ ABOVE" : "▼ BELOW"} <span id="intervalLabel">1s</span> <span id="liveDot" class="live-dot"></span></div>
       </div>
       <div class="chart-header-right">
         <div class="chart-header-pct" id="alertPct" style="color:${dirColor}">…</div>
@@ -675,7 +672,7 @@ async function openAlertChartSheet(alert) {
       </div>
     </div>
     <div class="mini-chart-wrap">
-      <canvas id="alertChart" height="150"></canvas>
+      <canvas id="alertChart"></canvas>
     </div>
     <div class="interval-row" id="intervalRow">
       <button class="pill small" data-int="15m">15m</button>
@@ -702,41 +699,39 @@ async function openAlertChartSheet(alert) {
       p.classList.add("selected");
       interval = p.dataset.int;
       document.getElementById("intervalLabel").textContent = intervalLabels[interval];
-      refreshAlertChart(alert, interval);
+      loadAlertChartData(alert, interval);
     });
   });
 
-  await refreshAlertChart(alert, interval);
-  requestAnimationFrame(() => refreshAlertChart(alert, interval)); // re-measure once layout has settled
-  clearInterval(activeInterval);
-  activeInterval = setInterval(() => refreshAlertChart(alert, interval), 8000);
+  await loadAlertChartData(alert, interval);
 }
 
-async function refreshAlertChart(alert, interval) {
-  try {
-    const data = await api(`/api/alerts/chart/${alert.coin}?interval=${interval}&limit=96`);
-    const current = n(data.current_price);
-    const target = n(alert.target_price);
-    const pct = current !== 0 ? ((target - current) / current) * 100 : 0;
+/* ---- Alert detail: Chart.js line chart, live via Binance WebSocket
+   (falls back to REST polling every 8s if the socket can't connect —
+   some in-app browsers restrict raw WebSocket to arbitrary hosts). ---- */
+let alertChartInstance = null;
+let alertSocket = null;
+let alertPollTimer = null;
 
-    const priceEl = document.getElementById("alertLivePrice");
-    if (priceEl) priceEl.textContent = formatPriceForChart(current);
-    const pctEl = document.getElementById("alertPct");
-    if (pctEl) pctEl.textContent = `${pct >= 0 ? "+" : ""}${pct.toFixed(2)}% to target`;
-
-    const canvas = document.getElementById("alertChart");
-    if (!canvas) return;
-    drawCandlestickChart(canvas, data.candles, target, current);
-  } catch (e) {
-    /* silent — a transient price-feed hiccup shouldn't spam toasts every 8s */
-  }
+function stopAlertLiveFeed() {
+  if (alertSocket) { try { alertSocket.close(); } catch (e) {} alertSocket = null; }
+  if (alertPollTimer) { clearInterval(alertPollTimer); alertPollTimer = null; }
+  const dot = document.getElementById("liveDot");
+  if (dot) dot.classList.remove("on");
 }
 
-/* Minimalist hand-drawn candlestick chart (no external chart lib needed) —
-   bullish = lavender/purple, bearish = black w/ a thin outline so it still
-   reads against the dark app background, matching the requested palette. */
-const CANDLE_BULL = "#26c6b0";
-const CANDLE_BEAR = "#ef6a5f";
+function setLiveDot(on) {
+  const dot = document.getElementById("liveDot");
+  if (dot) dot.classList.toggle("on", on);
+}
+
+function updateAlertHeader(current, target) {
+  const pct = current !== 0 ? ((target - current) / current) * 100 : 0;
+  const priceEl = document.getElementById("alertLivePrice");
+  if (priceEl) priceEl.textContent = formatPriceForChart(current);
+  const pctEl = document.getElementById("alertPct");
+  if (pctEl) pctEl.textContent = `${pct >= 0 ? "+" : ""}${pct.toFixed(2)}% to target`;
+}
 
 function formatPriceForChart(v) {
   const abs = Math.abs(v);
@@ -749,125 +744,111 @@ function formatPriceForChart(v) {
   return v.toLocaleString("en-US", { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
 }
 
-function drawCandlestickChart(canvas, candles, targetPrice, currentPrice) {
-  if (!candles || candles.length === 0) return;
-  const dpr = window.devicePixelRatio || 1;
-  const cssWidth = canvas.clientWidth || 320;
-  const cssHeight = parseInt(canvas.getAttribute("height"), 10) || 260;
-  canvas.style.width = cssWidth + "px";
-  canvas.style.height = cssHeight + "px";
-  canvas.width = Math.round(cssWidth * dpr);
-  canvas.height = Math.round(cssHeight * dpr);
-  const ctx = canvas.getContext("2d");
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  ctx.clearRect(0, 0, cssWidth, cssHeight);
+function renderAlertChart(closes, target, current) {
+  const canvas = document.getElementById("alertChart");
+  if (!canvas || typeof Chart === "undefined") return;
+  const isUp = target >= current;
+  const lineColor = isUp ? "#26c6b0" : "#ef6a5f";
+  const fillColor = isUp ? "rgba(38,198,176,0.15)" : "rgba(239,106,95,0.15)";
 
-  const highs = candles.map((c) => n(c.h));
-  const lows = candles.map((c) => n(c.l));
-  const current = currentPrice !== undefined ? currentPrice : n(candles[candles.length - 1].c);
-  let vmax = Math.max(...highs, targetPrice, current);
-  let vmin = Math.min(...lows, targetPrice, current);
-  const pad = (vmax - vmin) * 0.14 || Math.max(vmax * 0.01, 1);
-  vmax += pad; vmin -= pad;
-  const span = (vmax - vmin) || 1;
-
-  const axisFont = "10px -apple-system, sans-serif";
-  ctx.font = axisFont;
-  const axisW = Math.max(ctx.measureText(formatPriceForChart(vmax)).width, ctx.measureText(formatPriceForChart(vmin)).width) + 16;
-
-  const padX = 2, padY = 8;
-  const chartW = cssWidth - padX * 2 - axisW;
-  const chartH = cssHeight - padY * 2;
-  const count = candles.length;
-  const slotW = chartW / count;
-  const bodyW = Math.max(Math.min(slotW * 0.62, 8), 1.5);
-
-  const yFor = (v) => padY + chartH - ((v - vmin) / span) * chartH;
-
-  // Horizontal gridlines + price labels (right axis)
-  const gridLevels = 5;
-  ctx.textBaseline = "middle";
-  ctx.textAlign = "left";
-  for (let i = 0; i <= gridLevels; i++) {
-    const gv = vmin + (span * i) / gridLevels;
-    const gy = yFor(gv);
-    ctx.strokeStyle = "rgba(139,150,165,0.14)";
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(padX, gy);
-    ctx.lineTo(padX + chartW, gy);
-    ctx.stroke();
-    ctx.fillStyle = "#6b7686";
-    ctx.font = axisFont;
-    ctx.fillText(formatPriceForChart(gv), padX + chartW + 8, gy);
-  }
-
-  // Candles
-  candles.forEach((c, i) => {
-    const o = n(c.o), h = n(c.h), l = n(c.l), cl = n(c.c);
-    const cx = padX + slotW * (i + 0.5);
-    const bull = cl >= o;
-    const color = bull ? CANDLE_BULL : CANDLE_BEAR;
-
-    ctx.strokeStyle = color;
-    ctx.lineWidth = 1.3;
-    ctx.beginPath();
-    ctx.moveTo(cx, yFor(h));
-    ctx.lineTo(cx, yFor(l));
-    ctx.stroke();
-
-    const yTop = yFor(Math.max(o, cl));
-    const yBot = yFor(Math.min(o, cl));
-    const bodyH = Math.max(yBot - yTop, 1.5);
-    ctx.fillStyle = color;
-    ctx.fillRect(cx - bodyW / 2, yTop, bodyW, bodyH);
+  if (alertChartInstance) { alertChartInstance.destroy(); alertChartInstance = null; }
+  alertChartInstance = new Chart(canvas.getContext("2d"), {
+    type: "line",
+    data: {
+      labels: closes.map((_, i) => i),
+      datasets: [
+        { data: closes, borderColor: lineColor, backgroundColor: fillColor, borderWidth: 2, fill: true, tension: 0.25, pointRadius: 0 },
+        { data: closes.map(() => target), borderColor: "#8b96a5", borderDash: [5, 5], borderWidth: 1.5, pointRadius: 0, fill: false },
+      ],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      animation: false,
+      plugins: { legend: { display: false }, tooltip: { enabled: false } },
+      scales: {
+        x: { display: false },
+        y: {
+          position: "right",
+          grid: { color: "rgba(139,150,165,0.12)" },
+          ticks: { color: "#6b7686", font: { size: 10 }, callback: (v) => formatPriceForChart(v), maxTicksLimit: 5 },
+        },
+      },
+    },
   });
-
-  // Target reference line — dotted, colored by direction, labeled
-  const targetUp = targetPrice >= current;
-  const targetColor = targetUp ? CANDLE_BULL : CANDLE_BEAR;
-  ctx.setLineDash([1, 4]);
-  ctx.lineCap = "round";
-  ctx.strokeStyle = targetColor;
-  ctx.lineWidth = 1.5;
-  const ty = yFor(targetPrice);
-  ctx.beginPath();
-  ctx.moveTo(padX, ty);
-  ctx.lineTo(padX + chartW, ty);
-  ctx.stroke();
-  ctx.setLineDash([]);
-  drawPricePill(ctx, padX + chartW + 8, ty, formatPriceForChart(targetPrice), targetColor, "#06120f");
-
-  // Current price reference — thin dashed neutral line, labeled
-  ctx.setLineDash([6, 4]);
-  ctx.strokeStyle = "#c7d0dc";
-  ctx.lineWidth = 1;
-  const py = yFor(current);
-  ctx.beginPath();
-  ctx.moveTo(padX, py);
-  ctx.lineTo(padX + chartW, py);
-  ctx.stroke();
-  ctx.setLineDash([]);
-  drawPricePill(ctx, padX + chartW + 8, py, formatPriceForChart(current), "#2a3140", "#e7edf3");
 }
 
-function drawPricePill(ctx, x, y, text, bg, fg) {
-  ctx.font = "700 10px -apple-system, sans-serif";
-  const tw = ctx.measureText(text).width;
-  const w = tw + 8, h = 15;
-  let yy = y - h / 2;
-  ctx.fillStyle = bg;
-  if (ctx.roundRect) {
-    ctx.beginPath();
-    ctx.roundRect(x, yy, w, h, 5);
-    ctx.fill();
-  } else {
-    ctx.fillRect(x, yy, w, h);
+async function loadAlertChartData(alert, interval) {
+  stopAlertLiveFeed();
+  try {
+    const data = await api(`/api/alerts/chart/${alert.coin}?interval=${interval}&limit=96`);
+    const closes = data.candles.map((c) => n(c.c));
+    const target = n(alert.target_price);
+    const current = n(data.current_price);
+    renderAlertChart(closes, target, current);
+    updateAlertHeader(current, target);
+    startAlertLiveFeed(alert, interval, target);
+  } catch (e) {
+    toast(e.message, "error");
   }
-  ctx.fillStyle = fg;
-  ctx.textAlign = "left";
-  ctx.textBaseline = "middle";
-  ctx.fillText(text, x + 4, y + 0.5);
+}
+
+function startAlertLiveFeed(alert, interval, target) {
+  let connected = false;
+
+  const startPolling = () => {
+    if (alertPollTimer) return;
+    setLiveDot(false);
+    alertPollTimer = setInterval(async () => {
+      try {
+        const data = await api(`/api/alerts/chart/${alert.coin}?interval=${interval}&limit=96`);
+        const closes = data.candles.map((c) => n(c.c));
+        if (alertChartInstance) {
+          alertChartInstance.data.datasets[0].data = closes;
+          alertChartInstance.data.datasets[1].data = closes.map(() => target);
+          alertChartInstance.data.labels = closes.map((_, i) => i);
+          alertChartInstance.update("none");
+        }
+        updateAlertHeader(n(data.current_price), target);
+      } catch (e) { /* silent */ }
+    }, 8000);
+  };
+
+  try {
+    const ws = new WebSocket(`wss://stream.binance.com:9443/ws/${alert.coin.toLowerCase()}@kline_${interval}`);
+    alertSocket = ws;
+
+    const connectTimeout = setTimeout(() => {
+      if (!connected) { try { ws.close(); } catch (e) {} startPolling(); }
+    }, 5000);
+
+    ws.onopen = () => { connected = true; clearTimeout(connectTimeout); setLiveDot(true); };
+
+    ws.onmessage = (ev) => {
+      try {
+        const msg = JSON.parse(ev.data);
+        const k = msg.k;
+        if (!k || !alertChartInstance) return;
+        const close = parseFloat(k.c);
+        const ds0 = alertChartInstance.data.datasets[0].data;
+        if (k.x) {
+          ds0.push(close);
+          if (ds0.length > 96) ds0.shift();
+          alertChartInstance.data.datasets[1].data = ds0.map(() => target);
+          alertChartInstance.data.labels = ds0.map((_, i) => i);
+        } else if (ds0.length) {
+          ds0[ds0.length - 1] = close;
+        }
+        alertChartInstance.update("none");
+        updateAlertHeader(close, target);
+      } catch (e) { /* ignore malformed tick */ }
+    };
+
+    ws.onerror = () => { if (!connected) startPolling(); };
+    ws.onclose = () => { if (!alertPollTimer) startPolling(); };
+  } catch (e) {
+    startPolling();
+  }
 }
 
 document.getElementById("addAlertBtn").addEventListener("click", () => {
