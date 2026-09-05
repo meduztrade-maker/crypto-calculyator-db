@@ -74,13 +74,18 @@ function haptic(style = "light") {
 const sheetEl = document.getElementById("sheet");
 const sheetBackdrop = document.getElementById("sheetBackdrop");
 const sheetContent = document.getElementById("sheetContent");
+let activeInterval = null;
 
 function openSheet(html) {
+  clearInterval(activeInterval);
+  activeInterval = null;
   sheetContent.innerHTML = html;
   sheetEl.classList.add("open");
   sheetBackdrop.classList.add("open");
 }
 function closeSheet() {
+  clearInterval(activeInterval);
+  activeInterval = null;
   sheetEl.classList.remove("open");
   sheetBackdrop.classList.remove("open");
   setTimeout(() => { sheetContent.innerHTML = ""; }, 200);
@@ -620,14 +625,23 @@ function alertItemHtml(a) {
   </div>`;
 }
 
+let lastAlerts = [];
+
 async function loadAlerts() {
   const list = document.getElementById("alertsList");
   try {
     const alerts = await api("/api/alerts");
+    lastAlerts = alerts;
     if (alerts.length === 0) {
       list.innerHTML = `<div class="empty-state">Hozircha faol alert yo'q</div>`;
     } else {
       list.innerHTML = alerts.map(alertItemHtml).join("");
+      list.querySelectorAll(".list-item").forEach((row) => {
+        row.addEventListener("click", () => {
+          const a = lastAlerts.find((x) => x.id === parseInt(row.dataset.alertId));
+          if (a) openAlertChartSheet(a);
+        });
+      });
       list.querySelectorAll("[data-cancel-alert]").forEach((btn) => {
         btn.addEventListener("click", async (ev) => {
           ev.stopPropagation();
@@ -641,6 +655,107 @@ async function loadAlerts() {
     }
   } catch (e) {
     toast(e.message, "error");
+  }
+}
+
+/* ---- Alert detail: live minimalist price chart ---- */
+let alertChartInstance = null;
+
+async function openAlertChartSheet(alert) {
+  const isUp = alert.direction === "ABOVE";
+  openSheet(`
+    <div class="sheet-title">${isUp ? "⬆️" : "⬇️"} ${alert.coin}</div>
+    <div class="alert-live-price" id="alertLivePrice">…</div>
+    <div class="alert-target-row">
+      <span class="alert-target-dot" style="background:${isUp ? "#2ecc71" : "#ef4444"}"></span>
+      Alert: ${fmtDec(alert.target_price)}
+    </div>
+    <div class="mini-chart-wrap">
+      <canvas id="alertChart" height="160"></canvas>
+    </div>
+    <div class="interval-row" id="intervalRow">
+      <button class="pill small" data-int="15m">15m</button>
+      <button class="pill small selected" data-int="1h">1s</button>
+      <button class="pill small" data-int="4h">4s</button>
+      <button class="pill small" data-int="1d">1k</button>
+    </div>
+    <button class="btn-small full-w danger" data-cancel-alert="${alert.id}">❌ Alertni bekor qilish</button>
+  `);
+
+  sheetContent.querySelector("[data-cancel-alert]").addEventListener("click", async () => {
+    try {
+      await api(`/api/alerts/${alert.id}/cancel`, { method: "POST" });
+      toast("❌ Bekor qilindi");
+      closeSheet(); loadAlerts();
+    } catch (e) { toast(e.message, "error"); }
+  });
+
+  let interval = "1h";
+  sheetContent.querySelectorAll("#intervalRow .pill").forEach((p) => {
+    p.addEventListener("click", () => {
+      sheetContent.querySelectorAll("#intervalRow .pill").forEach((x) => x.classList.remove("selected"));
+      p.classList.add("selected");
+      interval = p.dataset.int;
+      refreshAlertChart(alert, interval);
+    });
+  });
+
+  await refreshAlertChart(alert, interval);
+  clearInterval(activeInterval);
+  activeInterval = setInterval(() => refreshAlertChart(alert, interval), 8000);
+}
+
+async function refreshAlertChart(alert, interval) {
+  try {
+    const data = await api(`/api/alerts/chart/${alert.coin}?interval=${interval}&limit=96`);
+    const priceEl = document.getElementById("alertLivePrice");
+    if (priceEl) priceEl.textContent = fmtDec(data.current_price);
+
+    const canvas = document.getElementById("alertChart");
+    if (!canvas || typeof Chart === "undefined") return;
+
+    const closes = data.candles.map((c) => n(c.c));
+    const target = n(alert.target_price);
+    const isUp = alert.direction === "ABOVE";
+    const lineColor = isUp ? "#2ecc71" : "#ef4444";
+
+    if (alertChartInstance) { alertChartInstance.destroy(); alertChartInstance = null; }
+    alertChartInstance = new Chart(canvas.getContext("2d"), {
+      type: "line",
+      data: {
+        labels: closes.map((_, i) => i),
+        datasets: [
+          {
+            data: closes,
+            borderColor: lineColor,
+            borderWidth: 2,
+            fill: false,
+            tension: 0.3,
+            pointRadius: 0,
+          },
+          {
+            data: closes.map(() => target),
+            borderColor: "#8b96a5",
+            borderWidth: 1.5,
+            borderDash: [5, 5],
+            pointRadius: 0,
+            fill: false,
+          },
+        ],
+      },
+      options: {
+        responsive: true,
+        animation: false,
+        plugins: { legend: { display: false }, tooltip: { enabled: false } },
+        scales: {
+          x: { display: false },
+          y: { display: false },
+        },
+        elements: { line: { capBezierPoints: true } },
+      },
+    });
+  } catch (e) {
+    /* silent — a transient price-feed hiccup shouldn't spam toasts every 8s */
   }
 }
 

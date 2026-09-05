@@ -48,3 +48,27 @@ async def get_all_prices() -> dict[str, Decimal]:
         except (KeyError, InvalidOperation):
             continue
     return prices
+
+
+_KLINES_URL = "https://api.binance.com/api/v3/klines"
+
+
+async def get_klines(symbol: str, interval: str = "15m", limit: int = 96) -> list[dict]:
+    """
+    Recent candles for a lightweight price chart — [{t: close_time_ms, c: close_price}, ...],
+    oldest first. Used by the Mini App's alert detail chart.
+    """
+    symbol = symbol.strip().upper()
+    async with aiohttp.ClientSession(timeout=_TIMEOUT) as http:
+        async with http.get(_KLINES_URL, params={"symbol": symbol, "interval": interval, "limit": str(limit)}) as resp:
+            if resp.status != 200:
+                raise PriceLookupError(f"{symbol} uchun narx tarixi topilmadi")
+            data = await resp.json()
+
+    out = []
+    for row in data:
+        try:
+            out.append({"t": int(row[6]), "c": str(Decimal(row[4]))})  # close_time, close price
+        except (IndexError, InvalidOperation):
+            continue
+    return out

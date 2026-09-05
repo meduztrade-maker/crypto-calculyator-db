@@ -235,6 +235,20 @@ main#screens { flex: 1; padding: 4px 16px calc(96px + var(--safe-bottom)); }
 .upload-box.has-image { padding: 0; border-style: solid; }
 .upload-box img { width: 100%; max-height: 180px; object-fit: cover; display: block; }
 
+/* ---------- Alert live chart ---------- */
+.alert-live-price { font-size: 34px; font-weight: 800; margin: 4px 0 6px; }
+.alert-target-row {
+  display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-dim);
+  margin-bottom: 14px;
+}
+.alert-target-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+.mini-chart-wrap {
+  background: var(--card-alt); border: 1px solid var(--border); border-radius: var(--radius-md);
+  padding: 10px 6px; margin-bottom: 14px;
+}
+.interval-row { display: flex; gap: 8px; margin-bottom: 16px; }
+.pill.small { padding: 6px 14px; font-size: 12.5px; }
+
 /* ---------- Toast ---------- */
 .toast {
   position: fixed; left: 50%; bottom: calc(90px + var(--safe-bottom)); transform: translateX(-50%) translateY(20px);

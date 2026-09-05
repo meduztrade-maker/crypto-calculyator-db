@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from bot.database.crud import TradeStateError, cancel_alert, create_alert, list_active_alerts
 from bot.database.models import User
-from bot.services.price_feed import PriceLookupError, get_price
+from bot.services.price_feed import PriceLookupError, get_klines, get_price
 from webapp.deps import get_current_user, get_session
 from webapp.schemas import AlertCreateIn, AlertOut
 
@@ -53,3 +53,18 @@ async def price(coin: str):
     except PriceLookupError as e:
         raise HTTPException(status_code=422, detail=str(e))
     return {"coin": _normalize_symbol(coin), "price": str(p)}
+
+
+@router.get("/chart/{coin}")
+async def chart(coin: str, interval: str = "15m", limit: int = 96):
+    symbol = _normalize_symbol(coin)
+    allowed_intervals = {"5m", "15m", "1h", "4h", "1d"}
+    if interval not in allowed_intervals:
+        raise HTTPException(status_code=422, detail="Noto'g'ri interval")
+    limit = max(20, min(limit, 200))
+    try:
+        candles = await get_klines(symbol, interval=interval, limit=limit)
+        current = await get_price(symbol)
+    except PriceLookupError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    return {"coin": symbol, "current_price": str(current), "candles": candles}
