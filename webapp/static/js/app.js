@@ -677,9 +677,10 @@ async function openAlertChartSheet(alert) {
         <div class="dchart-axis" id="dchartAxis"></div>
         <div class="dchart-current" id="dchartCurrent"><span class="dchart-current-price" id="dchartCurrentPrice"></span></div>
         <div class="dchart-alert" id="dchartAlert"><span class="dchart-alert-price" id="dchartAlertPrice"></span></div>
+        <div class="dchart-timeaxis-hint"></div>
       </div>
     </div>
-    <div class="hint-text" style="margin:-8px 0 12px">🤏 Siqib/yozib zoom · barmoq bilan surish · 2 marta bosish = reset</div>
+    <div class="hint-text" style="margin:-8px 0 12px">📏 O'ngdan tortish = bo'yiga, pastdan tortish = eniga zoom · o'rtadan surish · 2 marta bosish = reset</div>
     <div class="interval-row" id="intervalRow">
       <button class="pill small" data-int="15m">15m</button>
       <button class="pill small selected" data-int="1h">1s</button>
@@ -875,13 +876,24 @@ function setChartData(fullCandles, target, current) {
   renderAlertChart();
 }
 
-/* ---- Touch gestures: pinch to zoom (both axes), one-finger drag to pan
-   through history, double-tap to reset — TradingView-style. ---- */
+/* ---- Touch gestures, TradingView-style single-finger zones:
+   drag on the RIGHT price-axis strip -> vertical (price) zoom
+   drag on the BOTTOM strip           -> horizontal (time) zoom
+   drag anywhere else in the chart    -> pan through history
+   double-tap                         -> reset zoom/pan ---- */
 let chartTouch = null;
 let lastChartTap = 0;
 
-function touchDist(a, b) {
-  return Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
+const AXIS_W = 54;
+const TIME_AXIS_H = 20;
+
+function chartZoneAt(chartEl, clientX, clientY) {
+  const rect = chartEl.getBoundingClientRect();
+  const relX = clientX - rect.left;
+  const relY = clientY - rect.top;
+  if (relX > rect.width - AXIS_W) return "y-axis";
+  if (relY > rect.height - TIME_AXIS_H) return "x-axis";
+  return "pan";
 }
 
 function attachChartGestures() {
@@ -889,36 +901,43 @@ function attachChartGestures() {
   if (!el) return;
 
   el.addEventListener("touchstart", (e) => {
-    if (e.touches.length === 2) {
-      chartTouch = {
-        mode: "pinch",
-        startDist: touchDist(e.touches[0], e.touches[1]),
-        startYZoom: chartState.yZoom,
-        startVisible: chartState.visibleCount,
-        startIndex: chartState.startIndex,
-      };
-      e.preventDefault();
-    } else if (e.touches.length === 1) {
-      chartTouch = { mode: "pan", startX: e.touches[0].clientX, startIndex: chartState.startIndex };
-    }
+    if (e.touches.length !== 1) return;
+    const t = e.touches[0];
+    const zone = chartZoneAt(el, t.clientX, t.clientY);
+    chartTouch = {
+      zone,
+      startX: t.clientX,
+      startY: t.clientY,
+      startYZoom: chartState.yZoom,
+      startVisible: chartState.visibleCount,
+      startIndex: chartState.startIndex,
+    };
   }, { passive: false });
 
   el.addEventListener("touchmove", (e) => {
-    if (!chartTouch) return;
+    if (!chartTouch || e.touches.length !== 1) return;
     e.preventDefault();
-    if (chartTouch.mode === "pinch" && e.touches.length === 2) {
-      const d = touchDist(e.touches[0], e.touches[1]);
-      const scale = d / chartTouch.startDist;
-      chartState.yZoom = clampNum(chartTouch.startYZoom * scale, 0.4, 8);
+    const t = e.touches[0];
+
+    if (chartTouch.zone === "y-axis") {
+      // drag up = zoom in (narrower price range), drag down = zoom out
+      const dy = t.clientY - chartTouch.startY;
+      chartState.yZoom = clampNum(chartTouch.startYZoom * Math.exp(-dy / 120), 0.3, 10);
+      renderAlertChart();
+    } else if (chartTouch.zone === "x-axis") {
+      // drag right = zoom in (fewer, wider candles), drag left = zoom out
+      const dx = t.clientX - chartTouch.startX;
+      const scale = Math.exp(dx / 120);
       const newVisible = Math.round(chartTouch.startVisible / scale);
       chartState.visibleCount = clampNum(newVisible, Math.min(MIN_VISIBLE_CANDLES, chartState.fullCandles.length), chartState.fullCandles.length);
       chartState.startIndex = clampNum(chartTouch.startIndex, 0, Math.max(0, chartState.fullCandles.length - chartState.visibleCount));
       renderAlertChart();
-    } else if (chartTouch.mode === "pan" && e.touches.length === 1) {
+    } else {
+      // pan through history
       const chartEl = document.getElementById("alertChart");
-      const w = (chartEl.clientWidth || 320) - 54;
+      const w = (chartEl.clientWidth || 320) - AXIS_W;
       const candleW = w / chartState.visibleCount;
-      const dx = e.touches[0].clientX - chartTouch.startX;
+      const dx = t.clientX - chartTouch.startX;
       const deltaCandles = Math.round(-dx / candleW);
       chartState.startIndex = clampNum(chartTouch.startIndex + deltaCandles, 0, Math.max(0, chartState.fullCandles.length - chartState.visibleCount));
       renderAlertChart();
@@ -928,7 +947,7 @@ function attachChartGestures() {
   el.addEventListener("touchend", (e) => {
     if (e.touches.length === 0) {
       const now = Date.now();
-      if (chartTouch && chartTouch.mode === "pan" && now - lastChartTap < 300) {
+      if (chartTouch && chartTouch.zone === "pan" && now - lastChartTap < 300) {
         chartState.yZoom = 1;
         chartState.visibleCount = chartState.fullCandles.length;
         chartState.startIndex = 0;

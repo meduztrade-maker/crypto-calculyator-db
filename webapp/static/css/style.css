@@ -281,6 +281,10 @@ main#screens { flex: 1; padding: 4px 16px calc(96px + var(--safe-bottom)); }
   position: absolute; right: -54px; top: -8px; width: 50px; text-align: center;
   font-size: 9.5px; font-weight: 800; padding: 2px 0; border-radius: 3px; color: #06120f;
 }
+.dchart-timeaxis-hint {
+  position: absolute; left: 0; right: 54px; bottom: 0; height: 20px;
+  border-top: 1px solid rgba(139,150,165,0.15); pointer-events: none;
+}
 .interval-row { display: flex; gap: 8px; margin-bottom: 16px; }
 .pill.small { padding: 6px 14px; font-size: 12.5px; }
 
