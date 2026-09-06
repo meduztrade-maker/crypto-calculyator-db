@@ -679,6 +679,7 @@ async function openAlertChartSheet(alert) {
         <div class="dchart-alert" id="dchartAlert"><span class="dchart-alert-price" id="dchartAlertPrice"></span></div>
       </div>
     </div>
+    <div class="hint-text" style="margin:-8px 0 12px">🤏 Siqib/yozib zoom · barmoq bilan surish · 2 marta bosish = reset</div>
     <div class="interval-row" id="intervalRow">
       <button class="pill small" data-int="15m">15m</button>
       <button class="pill small selected" data-int="1h">1s</button>
@@ -707,6 +708,12 @@ async function openAlertChartSheet(alert) {
       loadAlertChartData(alert, interval);
     });
   });
+
+  chartState.startIndex = 0;
+  chartState.visibleCount = 0;
+  chartState.yZoom = 1;
+  chartState.fullCandles = [];
+  attachChartGestures();
 
   await loadAlertChartData(alert, interval);
 }
@@ -748,9 +755,14 @@ function formatPriceForChart(v) {
   return v.toLocaleString("en-US", { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
 }
 
-function renderAlertChart(candles, target, current) {
+const chartState = { fullCandles: [], startIndex: 0, visibleCount: 0, yZoom: 1, target: 0, current: 0 };
+const MIN_VISIBLE_CANDLES = 12;
+
+function clampNum(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
+
+function renderAlertChart() {
   const chartEl = document.getElementById("alertChart");
-  if (!chartEl) return;
+  if (!chartEl || chartState.fullCandles.length === 0) return;
   const candlesEl = document.getElementById("dchartCandles");
   const axisEl = document.getElementById("dchartAxis");
   const currentEl = document.getElementById("dchartCurrent");
@@ -758,20 +770,23 @@ function renderAlertChart(candles, target, current) {
   const alertEl = document.getElementById("dchartAlert");
   const alertPriceEl = document.getElementById("dchartAlertPrice");
 
+  const { fullCandles, startIndex, visibleCount, yZoom, target, current } = chartState;
+  const candles = fullCandles.slice(startIndex, startIndex + visibleCount);
+  if (candles.length === 0) return;
+
   const h = chartEl.clientHeight || 170;
   const axisW = 54;
   const w = (chartEl.clientWidth || 320) - axisW;
 
-  // Y-axis scale comes from the REAL price action only (candle highs/lows +
-  // current tick) — a far-away alert target never stretches/flattens the
-  // chart. If the target falls outside this range, its line is clamped to
-  // the nearest edge with an arrow indicator instead.
+  const showCurrentInRange = startIndex + visibleCount >= fullCandles.length;
   const highs = candles.map((c) => n(c.h));
   const lows = candles.map((c) => n(c.l));
-  const dataMin = Math.min(...lows, current);
-  const dataMax = Math.max(...highs, current);
-  const pad = (dataMax - dataMin) * 0.12 || Math.max(dataMax * 0.01, 1);
-  const minP = dataMin - pad, maxP = dataMax + pad;
+  const dataMin = Math.min(...lows, showCurrentInRange ? current : lows[lows.length - 1]);
+  const dataMax = Math.max(...highs, showCurrentInRange ? current : highs[highs.length - 1]);
+  const basePad = (dataMax - dataMin) * 0.12 || Math.max(dataMax * 0.01, 1);
+  const center = (dataMax + dataMin) / 2;
+  const halfSpan = ((dataMax - dataMin) / 2 + basePad) / yZoom;
+  const minP = center - halfSpan, maxP = center + halfSpan;
   const span = (maxP - minP) || 1;
   const y = (price) => h - ((price - minP) / span) * h;
 
@@ -789,7 +804,7 @@ function renderAlertChart(candles, target, current) {
   candlesEl.innerHTML = "";
   const count = candles.length;
   const slotW = w / count;
-  const bodyW = Math.max(Math.min(slotW * 0.6, 10), 2);
+  const bodyW = Math.max(Math.min(slotW * 0.6, 14), 1.5);
   candles.forEach((c, i) => {
     const o = n(c.o), hi = n(c.h), lo = n(c.l), cl = n(c.c);
     const bull = cl >= o;
@@ -818,8 +833,13 @@ function renderAlertChart(candles, target, current) {
     candlesEl.appendChild(el);
   });
 
-  currentEl.style.top = y(current) + "px";
-  currentPriceEl.textContent = formatPriceForChart(current);
+  if (showCurrentInRange) {
+    currentEl.style.display = "";
+    currentEl.style.top = y(current) + "px";
+    currentPriceEl.textContent = formatPriceForChart(current);
+  } else {
+    currentEl.style.display = "none";
+  }
 
   let alertY, edgeArrow = "";
   if (target > maxP) { alertY = 3; edgeArrow = "▲ "; }
@@ -833,23 +853,109 @@ function renderAlertChart(candles, target, current) {
   alertPriceEl.textContent = edgeArrow + formatPriceForChart(target);
 }
 
+function setChartData(fullCandles, target, current) {
+  const wasAtLatestEdge = chartState.visibleCount === 0 ||
+    (chartState.startIndex + chartState.visibleCount >= chartState.fullCandles.length);
+
+  chartState.fullCandles = fullCandles;
+  chartState.target = target;
+  chartState.current = current;
+
+  if (chartState.visibleCount === 0) {
+    chartState.visibleCount = fullCandles.length;
+  }
+  chartState.visibleCount = clampNum(chartState.visibleCount, Math.min(MIN_VISIBLE_CANDLES, fullCandles.length), fullCandles.length);
+
+  if (wasAtLatestEdge) {
+    chartState.startIndex = Math.max(0, fullCandles.length - chartState.visibleCount);
+  } else {
+    chartState.startIndex = clampNum(chartState.startIndex, 0, Math.max(0, fullCandles.length - chartState.visibleCount));
+  }
+
+  renderAlertChart();
+}
+
+/* ---- Touch gestures: pinch to zoom (both axes), one-finger drag to pan
+   through history, double-tap to reset — TradingView-style. ---- */
+let chartTouch = null;
+let lastChartTap = 0;
+
+function touchDist(a, b) {
+  return Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
+}
+
+function attachChartGestures() {
+  const el = document.getElementById("alertChart");
+  if (!el) return;
+
+  el.addEventListener("touchstart", (e) => {
+    if (e.touches.length === 2) {
+      chartTouch = {
+        mode: "pinch",
+        startDist: touchDist(e.touches[0], e.touches[1]),
+        startYZoom: chartState.yZoom,
+        startVisible: chartState.visibleCount,
+        startIndex: chartState.startIndex,
+      };
+      e.preventDefault();
+    } else if (e.touches.length === 1) {
+      chartTouch = { mode: "pan", startX: e.touches[0].clientX, startIndex: chartState.startIndex };
+    }
+  }, { passive: false });
+
+  el.addEventListener("touchmove", (e) => {
+    if (!chartTouch) return;
+    e.preventDefault();
+    if (chartTouch.mode === "pinch" && e.touches.length === 2) {
+      const d = touchDist(e.touches[0], e.touches[1]);
+      const scale = d / chartTouch.startDist;
+      chartState.yZoom = clampNum(chartTouch.startYZoom * scale, 0.4, 8);
+      const newVisible = Math.round(chartTouch.startVisible / scale);
+      chartState.visibleCount = clampNum(newVisible, Math.min(MIN_VISIBLE_CANDLES, chartState.fullCandles.length), chartState.fullCandles.length);
+      chartState.startIndex = clampNum(chartTouch.startIndex, 0, Math.max(0, chartState.fullCandles.length - chartState.visibleCount));
+      renderAlertChart();
+    } else if (chartTouch.mode === "pan" && e.touches.length === 1) {
+      const chartEl = document.getElementById("alertChart");
+      const w = (chartEl.clientWidth || 320) - 54;
+      const candleW = w / chartState.visibleCount;
+      const dx = e.touches[0].clientX - chartTouch.startX;
+      const deltaCandles = Math.round(-dx / candleW);
+      chartState.startIndex = clampNum(chartTouch.startIndex + deltaCandles, 0, Math.max(0, chartState.fullCandles.length - chartState.visibleCount));
+      renderAlertChart();
+    }
+  }, { passive: false });
+
+  el.addEventListener("touchend", (e) => {
+    if (e.touches.length === 0) {
+      const now = Date.now();
+      if (chartTouch && chartTouch.mode === "pan" && now - lastChartTap < 300) {
+        chartState.yZoom = 1;
+        chartState.visibleCount = chartState.fullCandles.length;
+        chartState.startIndex = 0;
+        renderAlertChart();
+      }
+      lastChartTap = now;
+      chartTouch = null;
+    }
+  });
+}
+
 async function loadAlertChartData(alert, interval) {
   stopAlertLiveFeed();
   try {
     const data = await api(`/api/alerts/chart/${alert.coin}?interval=${interval}&limit=96`);
     const target = n(alert.target_price);
     const current = n(data.current_price);
-    renderAlertChart(data.candles, target, current);
+    setChartData(data.candles, target, current);
     updateAlertHeader(current, target);
-    startAlertLiveFeed(alert, interval, target, data.candles);
+    startAlertLiveFeed(alert, interval, target);
   } catch (e) {
     toast(e.message, "error");
   }
 }
 
-function startAlertLiveFeed(alert, interval, target, initialCandles) {
+function startAlertLiveFeed(alert, interval, target) {
   let connected = false;
-  let candles = initialCandles;
 
   const startPolling = () => {
     if (alertPollTimer) return;
@@ -857,8 +963,7 @@ function startAlertLiveFeed(alert, interval, target, initialCandles) {
     alertPollTimer = setInterval(async () => {
       try {
         const data = await api(`/api/alerts/chart/${alert.coin}?interval=${interval}&limit=96`);
-        candles = data.candles;
-        renderAlertChart(candles, target, n(data.current_price));
+        setChartData(data.candles, target, n(data.current_price));
         updateAlertHeader(n(data.current_price), target);
       } catch (e) { /* silent */ }
     }, 8000);
@@ -878,8 +983,9 @@ function startAlertLiveFeed(alert, interval, target, initialCandles) {
       try {
         const msg = JSON.parse(ev.data);
         const k = msg.k;
-        if (!k || !candles.length) return;
+        if (!k || !chartState.fullCandles.length) return;
         const updated = { t: k.t, o: k.o, h: k.h, l: k.l, c: k.c };
+        let candles = chartState.fullCandles;
         if (k.x) {
           candles = candles.concat([updated]);
           if (candles.length > 96) candles = candles.slice(candles.length - 96);
@@ -887,7 +993,7 @@ function startAlertLiveFeed(alert, interval, target, initialCandles) {
           candles = candles.slice(0, -1).concat([updated]);
         }
         const close = parseFloat(k.c);
-        renderAlertChart(candles, target, close);
+        setChartData(candles, target, close);
         updateAlertHeader(close, target);
       } catch (e) { /* ignore malformed tick */ }
     };
