@@ -86,41 +86,45 @@ async def _restore_database_from_file(session: AsyncSession, src_path: str) -> N
     with open(src_path, "r", encoding="utf-8") as f:
         payload = json.load(f, object_hook=_json_object_hook)
 
-    async with session.begin():
-        # Trades first (FK -> users), then users, to respect referential integrity while clearing.
-        await session.execute(delete(Trade))
-        await session.execute(delete(User))
+    # Trades first (FK -> users), then users, to respect referential integrity while clearing.
+    # No explicit session.begin() here: SQLAlchemy 2.x auto-begins a transaction on first use,
+    # and this function is always called with a session that FastAPI/aiogram dependencies have
+    # already touched (e.g. to resolve the current user) - calling session.begin() again on top
+    # of that raises "A transaction is already begun on this Session."
+    await session.execute(delete(Trade))
+    await session.execute(delete(User))
 
-        for u in payload["users"]:
-            await session.execute(
-                text(
-                    "INSERT INTO users (id, telegram_id, username, margin, timezone, is_admin, created_at) "
-                    "VALUES (:id, :telegram_id, :username, :margin, :timezone, :is_admin, :created_at)"
-                ),
-                u,
-            )
-        for t in payload["trades"]:
-            await session.execute(
-                text(
-                    "INSERT INTO trades (id, user_id, coin, direction, status, risk_percent, entry_price, "
-                    "stop_loss_price, stop_distance_percent, result_type, result_rr, "
-                    "opening_screenshot_file_id, closing_screenshot_file_id, "
-                    "created_at, activated_at, closed_at, missed_at) "
-                    "VALUES (:id, :user_id, :coin, :direction, :status, :risk_percent, :entry_price, "
-                    ":stop_loss_price, :stop_distance_percent, :result_type, :result_rr, "
-                    ":opening_screenshot_file_id, :closing_screenshot_file_id, "
-                    ":created_at, :activated_at, :closed_at, :missed_at)"
-                ),
-                t,
-            )
+    for u in payload["users"]:
+        await session.execute(
+            text(
+                "INSERT INTO users (id, telegram_id, username, margin, timezone, is_admin, created_at) "
+                "VALUES (:id, :telegram_id, :username, :margin, :timezone, :is_admin, :created_at)"
+            ),
+            u,
+        )
+    for t in payload["trades"]:
+        await session.execute(
+            text(
+                "INSERT INTO trades (id, user_id, coin, direction, status, risk_percent, entry_price, "
+                "stop_loss_price, stop_distance_percent, result_type, result_rr, "
+                "opening_screenshot_file_id, closing_screenshot_file_id, "
+                "created_at, activated_at, closed_at, missed_at) "
+                "VALUES (:id, :user_id, :coin, :direction, :status, :risk_percent, :entry_price, "
+                ":stop_loss_price, :stop_distance_percent, :result_type, :result_rr, "
+                ":opening_screenshot_file_id, :closing_screenshot_file_id, "
+                ":created_at, :activated_at, :closed_at, :missed_at)"
+            ),
+            t,
+        )
 
-        # Realign auto-increment sequences with the restored max ids.
-        await session.execute(text(
-            "SELECT setval(pg_get_serial_sequence('users', 'id'), COALESCE((SELECT MAX(id) FROM users), 1))"
-        ))
-        await session.execute(text(
-            "SELECT setval(pg_get_serial_sequence('trades', 'id'), COALESCE((SELECT MAX(id) FROM trades), 1))"
-        ))
+    # Realign auto-increment sequences with the restored max ids.
+    await session.execute(text(
+        "SELECT setval(pg_get_serial_sequence('users', 'id'), COALESCE((SELECT MAX(id) FROM users), 1))"
+    ))
+    await session.execute(text(
+        "SELECT setval(pg_get_serial_sequence('trades', 'id'), COALESCE((SELECT MAX(id) FROM trades), 1))"
+    ))
+    await session.commit()
 
 
 def _backup_types_for(now: datetime) -> list[BackupType]:

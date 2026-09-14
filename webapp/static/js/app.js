@@ -1127,6 +1127,36 @@ document.getElementById("restoreBtn").addEventListener("click", () => {
   });
 });
 
+document.getElementById("restoreUploadBtn").addEventListener("click", () => {
+  document.getElementById("restoreFileInput").click();
+});
+document.getElementById("restoreFileInput").addEventListener("change", async () => {
+  const input = document.getElementById("restoreFileInput");
+  const file = input.files[0];
+  input.value = "";
+  if (!file) return;
+
+  openSheet(`
+    <div class="sheet-title">⚠️ Fayldan restore qilish</div>
+    <p class="hint-text">Tanlangan fayl: ${file.name}<br><br>Bu barcha current database ma'lumotlarini shu fayl bilan almashtiradi. Davom etasizmi?</p>
+    <button class="primary-btn" id="confirmRestoreUploadBtn" style="margin-top:10px">✅ Ha, Restore</button>
+    <button class="btn-small full-w" id="cancelRestoreUploadBtn">❌ Bekor qilish</button>
+  `);
+  sheetContent.querySelector("#cancelRestoreUploadBtn").addEventListener("click", closeSheet);
+  sheetContent.querySelector("#confirmRestoreUploadBtn").addEventListener("click", async () => {
+    toast("🔄 Restore boshlandi...");
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      await api("/api/settings/backup/restore-upload", { method: "POST", body: form, isForm: true });
+      toast("✅ Restore muvaffaqiyatli", "success");
+      closeSheet();
+    } catch (e) {
+      toast(e.message, "error");
+    }
+  });
+});
+
 /* ============================================================
    Init
    ============================================================ */
