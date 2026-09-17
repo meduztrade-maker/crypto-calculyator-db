@@ -157,6 +157,36 @@ main#screens { flex: 1; padding: 4px 16px calc(96px + var(--safe-bottom)); }
 
 .section-title { font-size: 13px; font-weight: 700; color: var(--text-dim); letter-spacing: 0.5px; margin: 6px 0 10px; }
 
+/* ---------- Calendar view ---------- */
+.cal-nav { display: flex; gap: 8px; margin-bottom: 14px; }
+.cal-nav .btn-small { flex: 1; }
+.cal-weekdays {
+  display: grid; grid-template-columns: repeat(7, 1fr) 0.85fr; gap: 5px;
+  font-size: 11px; color: var(--text-faint); text-align: center; margin-bottom: 6px; font-weight: 600;
+}
+.cal-wk-label { font-size: 10px; }
+.cal-grid { display: grid; grid-template-columns: repeat(7, 1fr) 0.85fr; gap: 5px; }
+.cal-day {
+  aspect-ratio: 1; border-radius: 8px; background: var(--card-alt); border: 1px solid var(--border);
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  font-size: 10px; padding: 2px; position: relative;
+}
+.cal-day.empty { background: transparent; border-color: transparent; }
+.cal-day.today { border-color: var(--accent); border-width: 1.5px; }
+.cal-day-num { font-size: 10.5px; color: var(--text-dim); font-weight: 600; }
+.cal-day.has-trades .cal-day-num { color: var(--text); }
+.cal-day-r { font-size: 10.5px; font-weight: 800; margin-top: 2px; line-height: 1.1; }
+.cal-day.win { background: var(--green-dim); border-color: rgba(46,204,113,0.35); }
+.cal-day.win .cal-day-r { color: var(--green); }
+.cal-day.loss { background: var(--red-dim); border-color: rgba(239,68,68,0.35); }
+.cal-day.loss .cal-day-r { color: var(--red); }
+.cal-week-total {
+  aspect-ratio: unset; background: transparent; border: none; justify-content: center;
+  font-size: 10px; color: var(--text-faint); font-weight: 700;
+}
+.cal-week-total.win { color: var(--green); }
+.cal-week-total.loss { color: var(--red); }
+
 /* ---------- Buttons ---------- */
 .primary-btn {
   width: 100%; background: var(--accent); color: #06121f; border: none;

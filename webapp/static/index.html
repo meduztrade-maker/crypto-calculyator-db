@@ -68,6 +68,7 @@
         <button class="seg-btn active" data-period="daily">Kunlik</button>
         <button class="seg-btn" data-period="weekly">Haftalik</button>
         <button class="seg-btn" data-period="custom">Davr</button>
+        <button class="seg-btn" data-period="calendar">Kalendar</button>
       </div>
 
       <div id="customDateRow" class="custom-date-row hidden">
@@ -77,29 +78,48 @@
         <button id="customApply" class="btn-small">Ko'rsatish</button>
       </div>
 
-      <div class="hero-card">
-        <div id="repLabel" class="hero-label">DAILY PERFORMANCE</div>
-        <div id="repR" class="hero-r">+0R</div>
-        <div class="streak-row">
-          <span id="repSub" class="hero-sub">0 trade · 0% win rate</span>
-          <span id="repStreak" class="streak-badge hidden"></span>
+      <div id="reportPeriodView">
+        <div class="hero-card">
+          <div id="repLabel" class="hero-label">DAILY PERFORMANCE</div>
+          <div id="repR" class="hero-r">+0R</div>
+          <div class="streak-row">
+            <span id="repSub" class="hero-sub">0 trade · 0% win rate</span>
+            <span id="repStreak" class="streak-badge hidden"></span>
+          </div>
         </div>
+
+        <div class="chart-card">
+          <div class="chart-card-title">EQUITY CURVE</div>
+          <canvas id="equityChart" height="180"></canvas>
+        </div>
+
+        <div class="stat-grid" id="statGrid"></div>
+
+        <div class="composition-bar-wrap">
+          <div class="composition-legend" id="compLegend"></div>
+          <div class="composition-bar" id="compBar"></div>
+        </div>
+
+        <div class="section-title">COINS</div>
+        <div id="coinsList" class="card-list"></div>
       </div>
 
-      <div class="chart-card">
-        <div class="chart-card-title">EQUITY CURVE</div>
-        <canvas id="equityChart" height="180"></canvas>
+      <div id="calendarView" class="hidden">
+        <div class="hero-card">
+          <div id="calMonthLabel" class="hero-label">SENTABR 2026</div>
+          <div id="calMonthR" class="hero-r">+0R</div>
+          <div class="hero-sub" id="calMonthSub">0 trade</div>
+        </div>
+        <div class="cal-nav">
+          <button class="btn-small" id="calPrevBtn">‹ Oldingi</button>
+          <button class="btn-small" id="calTodayBtn">Bugun</button>
+          <button class="btn-small" id="calNextBtn">Keyingi ›</button>
+        </div>
+        <div class="cal-weekdays">
+          <span>D</span><span>S</span><span>C</span><span>P</span><span>J</span><span>S</span><span>Y</span><span class="cal-wk-label">Hafta</span>
+        </div>
+        <div id="calGrid" class="cal-grid"></div>
       </div>
-
-      <div class="stat-grid" id="statGrid"></div>
-
-      <div class="composition-bar-wrap">
-        <div class="composition-legend" id="compLegend"></div>
-        <div class="composition-bar" id="compBar"></div>
-      </div>
-
-      <div class="section-title">COINS</div>
-      <div id="coinsList" class="card-list"></div>
     </section>
 
     <!-- ALERTS -->

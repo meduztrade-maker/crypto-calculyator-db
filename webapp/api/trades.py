@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+from datetime import datetime, timedelta
 from decimal import Decimal
 
-from fastapi import APIRouter, Depends, HTTPException
+import pytz
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from bot.database.crud import (
@@ -18,7 +21,8 @@ from bot.database.crud import (
     list_recent_trades,
     miss_trade,
 )
-from bot.database.models import Direction, ResultType, User
+from bot.database.models import Direction, ResultType, Trade, TradeStatus, User
+from bot.services.stats import TZ
 from webapp.deps import get_current_user, get_session
 from webapp.schemas import TradeCloseIn, TradeCreateIn, TradeOut
 
@@ -106,3 +110,32 @@ async def close(
     except TradeStateError as e:
         raise HTTPException(status_code=409, detail=str(e))
     return TradeOut.model_validate(trade)
+
+
+@router.get("/by-date", response_model=list[TradeOut])
+async def get_by_date(
+    date: str = Query(..., description="YYYY-MM-DD, local (app timezone) calendar date"),
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+):
+    try:
+        day = datetime.strptime(date, "%Y-%m-%d")
+    except ValueError:
+        raise HTTPException(status_code=422, detail="Sana formati: YYYY-MM-DD")
+
+    start_local = TZ.localize(day.replace(hour=0, minute=0, second=0, microsecond=0))
+    end_local = start_local + timedelta(days=1)
+    start_utc, end_utc = start_local.astimezone(pytz.utc), end_local.astimezone(pytz.utc)
+
+    result = await session.execute(
+        select(Trade)
+        .where(
+            Trade.user_id == user.id,
+            Trade.status == TradeStatus.CLOSED,
+            Trade.closed_at >= start_utc,
+            Trade.closed_at < end_utc,
+        )
+        .order_by(Trade.closed_at.asc())
+    )
+    trades = result.scalars().all()
+    return [TradeOut.model_validate(t) for t in trades]

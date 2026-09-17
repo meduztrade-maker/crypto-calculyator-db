@@ -223,3 +223,51 @@ def format_text_report(title: str, stats: PeriodStats) -> str:
     if stats.worst_trade and stats.total_trades > 1:
         lines.append(f"📉 Eng yomon: {format_coin_line(stats.worst_trade)}")
     return "\n".join(lines)
+
+
+@dataclass
+class CalendarDay:
+    date: str
+    total_r: Decimal
+    trades: int
+
+
+@dataclass
+class CalendarMonth:
+    year: int
+    month: int
+    days: list[CalendarDay]
+    month_total_r: Decimal
+    month_trades: int
+
+
+async def compute_calendar_month(session: AsyncSession, user: User, year: int, month: int) -> CalendarMonth:
+    """Per-day closed-trade R totals for one calendar month, bucketed in the app's local timezone."""
+    start_local = TZ.localize(datetime(year, month, 1))
+    if month == 12:
+        end_local = TZ.localize(datetime(year + 1, 1, 1))
+    else:
+        end_local = TZ.localize(datetime(year, month + 1, 1))
+    start_utc, end_utc = start_local.astimezone(pytz.utc), end_local.astimezone(pytz.utc)
+
+    result = await session.execute(
+        select(Trade.closed_at, Trade.result_rr).where(
+            Trade.user_id == user.id,
+            Trade.status == TradeStatus.CLOSED,
+            Trade.closed_at >= start_utc,
+            Trade.closed_at < end_utc,
+        )
+    )
+
+    buckets: dict[str, dict] = {}
+    for closed_at, rr in result.all():
+        local_date = closed_at.astimezone(TZ).date().isoformat()
+        b = buckets.setdefault(local_date, {"total_r": Decimal("0"), "trades": 0})
+        b["total_r"] += rr or Decimal("0")
+        b["trades"] += 1
+
+    days = [CalendarDay(date=d, total_r=v["total_r"], trades=v["trades"]) for d, v in sorted(buckets.items())]
+    month_total = sum((d.total_r for d in days), Decimal("0"))
+    month_trades = sum(d.trades for d in days)
+
+    return CalendarMonth(year=year, month=month, days=days, month_total_r=month_total, month_trades=month_trades)

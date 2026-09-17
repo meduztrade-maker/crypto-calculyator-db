@@ -475,7 +475,14 @@ document.querySelectorAll("#reportsSegmented .seg-btn").forEach((btn) => {
     state.reportsPeriod = btn.dataset.period;
     document.querySelectorAll("#reportsSegmented .seg-btn").forEach((b) => b.classList.toggle("active", b === btn));
     document.getElementById("customDateRow").classList.toggle("hidden", state.reportsPeriod !== "custom");
-    if (state.reportsPeriod !== "custom") loadReports();
+    const isCalendar = state.reportsPeriod === "calendar";
+    document.getElementById("reportPeriodView").classList.toggle("hidden", isCalendar);
+    document.getElementById("calendarView").classList.toggle("hidden", !isCalendar);
+    if (isCalendar) {
+      loadCalendar();
+    } else if (state.reportsPeriod !== "custom") {
+      loadReports();
+    }
   });
 });
 document.getElementById("customApply").addEventListener("click", loadReports);
@@ -604,6 +611,136 @@ function renderReport(stats) {
     }).join("");
   }
 }
+
+/* ============================================================
+   CALENDAR (monthly R heatmap)
+   ============================================================ */
+let calState = { year: 0, month: 0 };
+
+function initCalState() {
+  const now = new Date();
+  calState.year = now.getFullYear();
+  calState.month = now.getMonth() + 1;
+}
+initCalState();
+
+const CAL_MONTH_NAMES = ["", "Yanvar", "Fevral", "Mart", "Aprel", "May", "Iyun", "Iyul", "Avgust", "Sentabr", "Oktabr", "Noyabr", "Dekabr"];
+
+async function loadCalendar() {
+  try {
+    const data = await api(`/api/stats/calendar?year=${calState.year}&month=${calState.month}`);
+    renderCalendar(data);
+  } catch (e) {
+    toast(e.message, "error");
+  }
+}
+
+function renderCalendar(data) {
+  document.getElementById("calMonthLabel").textContent = `${CAL_MONTH_NAMES[data.month]} ${data.year}`;
+  const totalEl = document.getElementById("calMonthR");
+  totalEl.textContent = fmtR(data.month_total_r);
+  totalEl.className = "hero-r " + (n(data.month_total_r) >= 0 ? "pos" : "neg");
+  document.getElementById("calMonthSub").textContent = `${data.month_trades} trade`;
+
+  const byDate = {};
+  data.days.forEach((d) => { byDate[d.date] = d; });
+
+  const firstOfMonth = new Date(data.year, data.month - 1, 1);
+  const daysInMonth = new Date(data.year, data.month, 0).getDate();
+  const firstWeekday = (firstOfMonth.getDay() + 6) % 7; // Monday = 0
+
+  const todayStr = new Date().toISOString().slice(0, 10);
+
+  const cells = [];
+  for (let i = 0; i < firstWeekday; i++) cells.push(null);
+  for (let day = 1; day <= daysInMonth; day++) cells.push(day);
+
+  const grid = document.getElementById("calGrid");
+  grid.innerHTML = "";
+
+  let weekCells = [];
+  let weekTotal = 0;
+  let weekHasData = false;
+
+  const flushWeek = () => {
+    while (weekCells.length < 7) weekCells.push(null);
+    weekCells.forEach((day) => grid.appendChild(dayCellEl(day, data.year, data.month, byDate, todayStr)));
+    const wt = document.createElement("div");
+    wt.className = "cal-week-total" + (weekHasData ? (weekTotal >= 0 ? " win" : " loss") : "");
+    wt.textContent = weekHasData ? fmtSigned(weekTotal) : "";
+    grid.appendChild(wt);
+    weekCells = []; weekTotal = 0; weekHasData = false;
+  };
+
+  cells.forEach((day) => {
+    weekCells.push(day);
+    if (day) {
+      const dateStr = `${data.year}-${String(data.month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+      const info = byDate[dateStr];
+      if (info) { weekTotal += n(info.total_r); weekHasData = true; }
+    }
+    if (weekCells.length === 7) flushWeek();
+  });
+  if (weekCells.length > 0) flushWeek();
+}
+
+function dayCellEl(day, year, month, byDate, todayStr) {
+  const el = document.createElement("div");
+  if (!day) { el.className = "cal-day empty"; return el; }
+
+  const dateStr = `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+  const info = byDate[dateStr];
+  el.className = "cal-day";
+  if (dateStr === todayStr) el.classList.add("today");
+  if (info) {
+    el.classList.add("has-trades", n(info.total_r) >= 0 ? "win" : "loss");
+  }
+  const num = document.createElement("div");
+  num.className = "cal-day-num";
+  num.textContent = String(day);
+  el.appendChild(num);
+  if (info) {
+    const r = document.createElement("div");
+    r.className = "cal-day-r";
+    r.textContent = fmtSigned(info.total_r);
+    el.appendChild(r);
+    el.addEventListener("click", () => openDayTradesSheet(dateStr, info));
+  }
+  return el;
+}
+
+async function openDayTradesSheet(dateStr, info) {
+  try {
+    const trades = await api(`/api/trades/by-date?date=${dateStr}`);
+    openSheet(`
+      <div class="sheet-title">${dateStr} — ${fmtR(info.total_r)}</div>
+      <div class="card-list" id="dayTradesList"></div>
+    `);
+    const list = document.getElementById("dayTradesList");
+    if (trades.length === 0) {
+      list.innerHTML = `<div class="empty-state">Trade topilmadi</div>`;
+    } else {
+      list.innerHTML = trades.map((t) => tradeItemHtml(t, "recent")).join("");
+    }
+  } catch (e) {
+    toast(e.message, "error");
+  }
+}
+
+document.getElementById("calPrevBtn").addEventListener("click", () => {
+  calState.month -= 1;
+  if (calState.month < 1) { calState.month = 12; calState.year -= 1; }
+  loadCalendar();
+});
+document.getElementById("calNextBtn").addEventListener("click", () => {
+  calState.month += 1;
+  if (calState.month > 12) { calState.month = 1; calState.year += 1; }
+  loadCalendar();
+});
+document.getElementById("calTodayBtn").addEventListener("click", () => {
+  initCalState();
+  loadCalendar();
+});
 
 /* ============================================================
    ALERTS

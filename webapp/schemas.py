@@ -126,3 +126,17 @@ class BackupOut(BaseModel):
     backup_type: str
     status: str
     created_at: datetime
+
+
+class CalendarDayOut(BaseModel):
+    date: str
+    total_r: Decimal
+    trades: int
+
+
+class CalendarMonthOut(BaseModel):
+    year: int
+    month: int
+    days: list[CalendarDayOut]
+    month_total_r: Decimal
+    month_trades: int

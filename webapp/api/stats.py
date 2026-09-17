@@ -7,9 +7,9 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from bot.database.models import User
-from bot.services.stats import compute_period_stats, current_week_bounds, custom_bounds, today_bounds
+from bot.services.stats import compute_calendar_month, compute_period_stats, current_week_bounds, custom_bounds, today_bounds
 from webapp.deps import get_current_user, get_session
-from webapp.schemas import CoinResultOut, StatsOut
+from webapp.schemas import CalendarDayOut, CalendarMonthOut, CoinResultOut, StatsOut
 
 router = APIRouter(prefix="/api/stats", tags=["stats"])
 
@@ -61,4 +61,21 @@ async def get_stats(
         worst_trade=CoinResultOut(**vars(stats.worst_trade)) if stats.worst_trade else None,
         coins=[CoinResultOut(**vars(c)) for c in stats.coins],
         equity_curve=stats.equity_curve(),
+    )
+
+
+@router.get("/calendar", response_model=CalendarMonthOut)
+async def get_calendar(
+    year: int = Query(...),
+    month: int = Query(..., ge=1, le=12),
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+):
+    data = await compute_calendar_month(session, user, year, month)
+    return CalendarMonthOut(
+        year=data.year,
+        month=data.month,
+        days=[CalendarDayOut(date=d.date, total_r=d.total_r, trades=d.trades) for d in data.days],
+        month_total_r=data.month_total_r,
+        month_trades=data.month_trades,
     )
