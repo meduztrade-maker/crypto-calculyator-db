@@ -1192,6 +1192,23 @@ document.getElementById("addAlertBtn").addEventListener("click", () => {
 /* ============================================================
    SETTINGS
    ============================================================ */
+document.getElementById("helpBtn").addEventListener("click", () => {
+  openSheet(`
+    <div class="sheet-title">📖 Qo'llanma</div>
+    <div class="help-content">
+      <p><b>➕ Trade qo'shish</b><br>Coin, yo'nalish, risk %, Entry va SL narxini kiritib, screenshot yuborasiz (ixtiyoriy). Trade PENDING sifatida saqlanadi.</p>
+      <p><b>⏳ Pending</b><br>Hali faollashmagan tradelar. Activate (limit ishlaganda), Missed (bekor bo'lsa) yoki Delete qilishingiz mumkin.</p>
+      <p><b>🟢 Active</b><br>Ochiq tradelar. Yopish: 🛑 SL (avtomatik -1R), 🟡 B/U yoki 🟢 TP (RR kiritib) — screenshot bilan.</p>
+      <p><b>📊 Hisobot</b><br>Kunlik/Haftalik/Davr — equity curve, Win Rate, Profit Factor, Max Drawdown. Kalendar — har kunning R natijasi rangli ko'rinishda, kunni bosib o'sha kungi tradelarni ko'rish mumkin.</p>
+      <p><b>🧮 Leverage Calculator</b><br>SL masofasi (%) va risk ($) kiritib, kerakli leverage'ni hisoblaydi.</p>
+      <p><b>🗑 Oxirgi tradelar</b><br>Oxirgi 5 ta trade — xato kiritilganini butunlay o'chirish uchun.</p>
+      <p><b>🔔 Alert</b><br>Coin va maqsadli narx kiriting — narx yetganda Telegram orqali xabar beramiz. Bosib jonli grafikni ko'rish mumkin.</p>
+      <p><b>⚙️ Sozlamalar</b><br>Margin o'zgartirish, va (admin uchun) backup/restore.</p>
+      <p class="hint-text">Botning o'zida ham istalgan vaqt <b>/help</b> yozib shu qo'llanmani ko'rishingiz mumkin.</p>
+    </div>
+  `);
+});
+
 async function loadSettings() {
   try {
     const me = await api("/api/me");

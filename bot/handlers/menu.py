@@ -13,11 +13,13 @@ from bot.handlers.pending import render_pending
 from bot.handlers.recent_trades import render_recent_trades
 from bot.handlers.reports import render_reports
 from bot.handlers.settings import render_settings
+from bot.handlers.start import HELP_TEXT
 from bot.handlers.trade_create import render_add_trade
 from bot.keyboards.inline import (
     MENU_ACTIVE,
     MENU_ADD_TRADE,
     MENU_ALERTS,
+    MENU_HELP,
     MENU_LEVERAGE,
     MENU_PENDING,
     MENU_RECENT,
@@ -87,3 +89,10 @@ async def menu_alerts(message: Message, state: FSMContext, session: AsyncSession
 async def menu_settings(message: Message, state: FSMContext, user: User) -> None:
     await state.clear()
     await render_settings(message, user)
+
+
+@router.message(F.text == MENU_HELP)
+@safe_handler
+async def menu_help(message: Message, state: FSMContext) -> None:
+    await state.clear()
+    await message.answer(HELP_TEXT)
