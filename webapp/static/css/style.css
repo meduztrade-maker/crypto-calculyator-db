@@ -334,3 +334,77 @@ main#screens { flex: 1; padding: 4px 16px calc(96px + var(--safe-bottom)); }
 .toast.success { border-color: var(--green-dim); color: #b9f6ca; }
 
 ::-webkit-scrollbar { display: none; }
+
+/* ============================================================
+   Professional polish pass
+   ============================================================ */
+
+/* Depth + smoother interactions */
+.card, .list-item, .hero-card, .chart-card, .stat-chip, .quick-btn {
+  box-shadow: 0 1px 0 rgba(255,255,255,0.02) inset, 0 4px 14px rgba(0,0,0,0.18);
+  transition: transform 0.12s ease, background 0.15s ease, box-shadow 0.15s ease;
+}
+.list-item:active, .quick-btn:active, .cal-day:active {
+  transform: scale(0.97);
+}
+.primary-btn, .btn-small {
+  transition: transform 0.12s ease, opacity 0.15s ease, background 0.15s ease;
+}
+.primary-btn:active, .btn-small:active {
+  transform: scale(0.97);
+}
+.pill { transition: transform 0.1s ease, background 0.15s ease, color 0.15s ease; }
+.pill:active { transform: scale(0.94); }
+
+.hero-card {
+  position: relative;
+  overflow: hidden;
+}
+.hero-card::before {
+  content: "";
+  position: absolute; inset: 0;
+  background: radial-gradient(120px 80px at 15% 0%, rgba(88,166,255,0.10), transparent 70%);
+  pointer-events: none;
+}
+
+.tab { transition: color 0.15s ease, transform 0.15s ease; }
+.tab.active { transform: translateY(-1px); }
+.tab.active .tab-icon { filter: drop-shadow(0 0 6px rgba(88,166,255,0.45)); }
+
+/* Skeleton loading shimmer */
+.skeleton {
+  background: linear-gradient(90deg, var(--card) 25%, var(--card-alt) 37%, var(--card) 63%);
+  background-size: 400% 100%;
+  animation: skeleton-shimmer 1.4s ease infinite;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+}
+@keyframes skeleton-shimmer {
+  0% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+.skeleton-row { height: 58px; margin-bottom: 10px; }
+.skeleton-hero { height: 96px; margin: 10px 0 16px; border-radius: var(--radius-lg); }
+
+/* Refined empty state with icon */
+.empty-state {
+  display: flex; flex-direction: column; align-items: center; gap: 10px;
+  padding: 48px 20px; color: var(--text-faint); font-size: 13.5px;
+}
+.empty-state .empty-icon { font-size: 32px; opacity: 0.55; }
+.empty-state .empty-cta {
+  margin-top: 4px; color: var(--accent); font-weight: 700; font-size: 13px;
+}
+
+/* Segmented + tabbar subtle glass feel */
+.segmented, .tabbar { backdrop-filter: blur(6px); }
+
+/* Toast: nicer entrance */
+.toast { box-shadow: 0 10px 30px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.03) inset; }
+
+/* Sheet: smoother handle + slight elevation */
+.sheet { box-shadow: 0 -12px 40px rgba(0,0,0,0.45); }
+.sheet-handle { background: var(--text-faint); opacity: 0.35; }
+
+/* Cal day hover/press polish */
+.cal-day { transition: transform 0.1s ease; }

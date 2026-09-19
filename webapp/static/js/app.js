@@ -68,6 +68,13 @@ function haptic(style = "light") {
   }
 }
 
+function skeletonRows(count = 3) {
+  return Array.from({ length: count }, () => `<div class="skeleton skeleton-row"></div>`).join("");
+}
+function emptyState(icon, text, cta = "") {
+  return `<div class="empty-state"><span class="empty-icon">${icon}</span><span>${text}</span>${cta ? `<span class="empty-cta">${cta}</span>` : ""}</div>`;
+}
+
 /* ============================================================
    Bottom sheet
    ============================================================ */
@@ -169,12 +176,14 @@ function setTradesSub(sub) {
 
 async function loadTrades() {
   const list = document.getElementById("tradesList");
-  list.innerHTML = "";
+  list.innerHTML = skeletonRows(3);
   try {
     const path = state.tradesSub === "recent" ? "/api/trades/recent?limit=5" : `/api/trades/${state.tradesSub}`;
     const trades = await api(path);
     if (trades.length === 0) {
-      list.innerHTML = `<div class="empty-state">Bu bo'limda trade yo'q</div>`;
+      const icons = { pending: "⏳", active: "🟢", recent: "🗑" };
+      const cta = state.tradesSub === "pending" ? "➕ Trade qo'shish bilan boshlang" : "";
+      list.innerHTML = emptyState(icons[state.tradesSub] || "📋", "Bu bo'limda trade yo'q", cta);
       return;
     }
     list.innerHTML = trades.map((t) => tradeItemHtml(t, state.tradesSub)).join("");
@@ -763,11 +772,12 @@ let lastAlerts = [];
 
 async function loadAlerts() {
   const list = document.getElementById("alertsList");
+  list.innerHTML = skeletonRows(2);
   try {
     const alerts = await api("/api/alerts");
     lastAlerts = alerts;
     if (alerts.length === 0) {
-      list.innerHTML = `<div class="empty-state">Hozircha faol alert yo'q</div>`;
+      list.innerHTML = emptyState("🔔", "Hozircha faol alert yo'q", "➕ Yangi alert qo'ying");
     } else {
       list.innerHTML = alerts.map(alertItemHtml).join("");
       list.querySelectorAll(".list-item").forEach((row) => {
