@@ -32,20 +32,50 @@
         <div id="heroSub" class="hero-sub">0 trade · 0% win rate</div>
       </div>
 
+      <div class="mini-stat-row">
+        <div class="mini-stat-card">
+          <div class="mini-stat-icon icon-blue">📈</div>
+          <div class="mini-stat-label">Haftalik</div>
+          <div id="dashWeekR" class="mini-stat-value">+0R</div>
+        </div>
+        <div class="mini-stat-card">
+          <div class="mini-stat-icon icon-purple">🔥</div>
+          <div class="mini-stat-label">Streak</div>
+          <div id="dashStreak" class="mini-stat-value">-</div>
+        </div>
+      </div>
+
+      <div class="ring-card">
+        <div class="ring-chart-wrap">
+          <div id="winRateRing" class="ring-chart" style="--pct:0">
+            <div class="ring-center">
+              <div id="ringPct" class="ring-pct">0%</div>
+              <div class="ring-label">Win Rate</div>
+            </div>
+          </div>
+        </div>
+        <div class="ring-legend">
+          <div class="ring-legend-title">HAFTALIK</div>
+          <div><span class="leg-dot" style="background:var(--green)"></span>Win <b id="ringWins">0</b></div>
+          <div><span class="leg-dot" style="background:var(--red)"></span>Loss <b id="ringLosses">0</b></div>
+          <div><span class="leg-dot" style="background:var(--gray)"></span>B/U <b id="ringBE">0</b></div>
+        </div>
+      </div>
+
       <div class="quick-grid">
         <button class="quick-btn" data-action="add-trade">
-          <span class="qi">➕</span><span>Trade qo'shish</span>
+          <span class="qi icon-green">➕</span><span>Trade qo'shish</span>
         </button>
         <button class="quick-btn" data-nav="trades" data-sub="pending">
-          <span class="qi">⏳</span><span>Pending</span>
+          <span class="qi icon-amber">⏳</span><span>Pending</span>
           <span id="qPendingCount" class="qbadge">0</span>
         </button>
         <button class="quick-btn" data-nav="trades" data-sub="active">
-          <span class="qi">🟢</span><span>Active</span>
+          <span class="qi icon-teal">🟢</span><span>Active</span>
           <span id="qActiveCount" class="qbadge">0</span>
         </button>
         <button class="quick-btn" data-nav="reports">
-          <span class="qi">📊</span><span>Hisobot</span>
+          <span class="qi icon-blue">📊</span><span>Hisobot</span>
         </button>
       </div>
 

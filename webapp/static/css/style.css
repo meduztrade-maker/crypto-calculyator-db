@@ -408,3 +408,52 @@ main#screens { flex: 1; padding: 4px 16px calc(96px + var(--safe-bottom)); }
 
 /* Cal day hover/press polish */
 .cal-day { transition: transform 0.1s ease; }
+
+/* ============================================================
+   Premium dashboard components (icon badges, ring chart)
+   ============================================================ */
+.icon-blue { background: rgba(88,166,255,0.14); color: var(--accent); }
+.icon-green { background: rgba(46,204,113,0.14); color: var(--green); }
+.icon-red { background: rgba(239,68,68,0.14); color: var(--red); }
+.icon-purple { background: rgba(168,120,255,0.14); color: #a878ff; }
+.icon-amber { background: rgba(240,180,60,0.14); color: #f0b43c; }
+.icon-teal { background: rgba(38,198,176,0.14); color: #26c6b0; }
+
+.qi.qi, .quick-btn .qi {
+  width: 40px; height: 40px; border-radius: 12px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 19px; margin-bottom: 2px;
+}
+
+.mini-stat-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 14px; }
+.mini-stat-card {
+  background: var(--card); border: 1px solid var(--border); border-radius: var(--radius-md);
+  padding: 14px;
+}
+.mini-stat-icon {
+  width: 34px; height: 34px; border-radius: 10px; display: flex; align-items: center; justify-content: center;
+  font-size: 16px; margin-bottom: 10px;
+}
+.mini-stat-label { font-size: 11.5px; color: var(--text-dim); }
+.mini-stat-value { font-size: 17px; font-weight: 800; margin-top: 3px; }
+
+.ring-card {
+  background: var(--card); border: 1px solid var(--border); border-radius: var(--radius-lg);
+  padding: 18px; margin-bottom: 16px; display: flex; align-items: center; gap: 20px;
+}
+.ring-chart-wrap { flex: none; }
+.ring-chart {
+  width: 96px; height: 96px; border-radius: 50%;
+  background: conic-gradient(var(--green) calc(var(--pct, 0) * 1%), var(--card-alt) 0);
+  display: flex; align-items: center; justify-content: center;
+  transition: background 0.6s ease;
+}
+.ring-center {
+  width: 70px; height: 70px; border-radius: 50%; background: var(--card);
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+}
+.ring-pct { font-size: 18px; font-weight: 800; }
+.ring-label { font-size: 9.5px; color: var(--text-faint); margin-top: 1px; }
+.ring-legend { display: flex; flex-direction: column; gap: 7px; font-size: 12.5px; color: var(--text-dim); }
+.ring-legend-title { font-size: 10.5px; color: var(--text-faint); font-weight: 700; letter-spacing: 0.5px; margin-bottom: 2px; }
+.ring-legend b { color: var(--text); font-weight: 800; margin-left: 3px; }

@@ -132,8 +132,9 @@ document.querySelectorAll("[data-nav]").forEach((el) => {
    ============================================================ */
 async function loadDashboard() {
   try {
-    const [stats, pending, active, alerts] = await Promise.all([
+    const [stats, weekly, pending, active, alerts] = await Promise.all([
       api("/api/stats?period=daily"),
+      api("/api/stats?period=weekly"),
       api("/api/trades/pending"),
       api("/api/trades/active"),
       api("/api/alerts"),
@@ -146,6 +147,26 @@ async function loadDashboard() {
 
     document.getElementById("qPendingCount").textContent = pending.length;
     document.getElementById("qActiveCount").textContent = active.length;
+
+    const weekREl = document.getElementById("dashWeekR");
+    weekREl.textContent = fmtR(weekly.total_r);
+    weekREl.style.color = n(weekly.total_r) >= 0 ? "var(--green)" : "var(--red)";
+
+    const streakEl = document.getElementById("dashStreak");
+    if (weekly.streak_count > 0 && weekly.streak_kind !== "be" && weekly.streak_kind !== "none") {
+      streakEl.textContent = `${weekly.streak_count} ${weekly.streak_kind === "win" ? "g'alaba" : "zarar"}`;
+      streakEl.style.color = weekly.streak_kind === "win" ? "var(--green)" : "var(--red)";
+    } else {
+      streakEl.textContent = "-";
+      streakEl.style.color = "var(--text)";
+    }
+
+    const ring = document.getElementById("winRateRing");
+    ring.style.setProperty("--pct", fmtDec(weekly.win_rate));
+    document.getElementById("ringPct").textContent = `${fmtDec(weekly.win_rate)}%`;
+    document.getElementById("ringWins").textContent = weekly.wins;
+    document.getElementById("ringLosses").textContent = weekly.losses;
+    document.getElementById("ringBE").textContent = weekly.breakeven;
 
     const alertsBox = document.getElementById("dashAlerts");
     if (alerts.length === 0) {
