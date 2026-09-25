@@ -62,6 +62,32 @@ class LeverageOut(BaseModel):
     leverage: Decimal
 
 
+class LeverageResultItem(BaseModel):
+    label: str
+    margin: Decimal
+    position_size: Decimal
+    leverage: Decimal
+
+
+class LeverageMultiOut(BaseModel):
+    risk: Decimal
+    sl_distance_percent: Decimal
+    results: list[LeverageResultItem]
+
+
+class MarginPresetOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    label: str
+    amount: Decimal
+
+
+class MarginPresetIn(BaseModel):
+    label: str
+    amount: Decimal
+
+
 class AlertOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

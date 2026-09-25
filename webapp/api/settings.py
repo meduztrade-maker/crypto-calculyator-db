@@ -8,11 +8,11 @@ from aiogram import Bot
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from bot.database.crud import update_margin
+from bot.database.crud import add_margin_preset, delete_margin_preset, list_margin_presets, update_margin
 from bot.database.models import User
 from bot.services.backup import _restore_database_from_file, get_last_backup, restore_latest, run_backup
 from webapp.deps import get_current_user, get_session
-from webapp.schemas import BackupOut, MarginIn, MeOut
+from webapp.schemas import BackupOut, MarginIn, MarginPresetIn, MarginPresetOut, MeOut
 
 router = APIRouter(prefix="/api", tags=["settings"])
 
@@ -37,6 +37,35 @@ async def set_margin(body: MarginIn, user: User = Depends(get_current_user), ses
         raise HTTPException(status_code=422, detail="Margin musbat bo'lishi kerak")
     user = await update_margin(session, user, body.margin)
     return MeOut(telegram_id=user.telegram_id, username=user.username, margin=user.margin, timezone=user.timezone, is_admin=user.is_admin)
+
+
+MAX_MARGIN_PRESETS = 5
+
+
+@router.get("/settings/margins", response_model=list[MarginPresetOut])
+async def get_margins(user: User = Depends(get_current_user), session: AsyncSession = Depends(get_session)):
+    return await list_margin_presets(session, user)
+
+
+@router.post("/settings/margins", response_model=MarginPresetOut)
+async def add_margin(body: MarginPresetIn, user: User = Depends(get_current_user), session: AsyncSession = Depends(get_session)):
+    if body.amount <= 0:
+        raise HTTPException(status_code=422, detail="Marja musbat bo'lishi kerak")
+    label = body.label.strip()[:32]
+    if not label:
+        raise HTTPException(status_code=422, detail="Nom bo'sh bo'lmasin")
+    existing = await list_margin_presets(session, user)
+    if len(existing) >= MAX_MARGIN_PRESETS:
+        raise HTTPException(status_code=422, detail=f"Ko'pi bilan {MAX_MARGIN_PRESETS} ta marja saqlash mumkin")
+    return await add_margin_preset(session, user, label, body.amount)
+
+
+@router.delete("/settings/margins/{preset_id}")
+async def remove_margin(preset_id: int, user: User = Depends(get_current_user), session: AsyncSession = Depends(get_session)):
+    ok = await delete_margin_preset(session, user, preset_id)
+    if not ok:
+        raise HTTPException(status_code=404, detail="Topilmadi")
+    return {"ok": True}
 
 
 @router.post("/settings/backup/now")

@@ -39,6 +39,33 @@ async function api(path, { method = "GET", body = null, isForm = false } = {}) {
    ============================================================ */
 function n(v) { return v === null || v === undefined ? 0 : parseFloat(v); }
 
+/* Decimal price/amount fields use type="text" + inputmode="decimal"
+   instead of type="number": on some phones, when the OS region format
+   uses a comma as the decimal separator, a native <input type="number">
+   silently rejects a typed "." (the value just never updates) — a
+   well-known mobile-web gotcha. Sanitizing text input ourselves accepts
+   either "." or "," from the user and always normalizes to ".". */
+function sanitizeDecimal(raw) {
+  let v = (raw || "").replace(/[^0-9.,]/g, "").replace(",", ".");
+  const firstDot = v.indexOf(".");
+  if (firstDot !== -1) {
+    v = v.slice(0, firstDot + 1) + v.slice(firstDot + 1).replace(/\./g, "");
+  }
+  return v;
+}
+
+function bindDecimalInput(el) {
+  if (!el) return;
+  el.addEventListener("input", () => {
+    const cleaned = sanitizeDecimal(el.value);
+    if (cleaned !== el.value) el.value = cleaned;
+  });
+}
+
+function bindAllDecimalInputs(root) {
+  root.querySelectorAll('input[data-decimal]').forEach(bindDecimalInput);
+}
+
 function fmtDec(v) {
   const num = n(v);
   if (Number.isInteger(num)) return String(num);
@@ -85,6 +112,7 @@ const sheetContent = document.getElementById("sheetContent");
 function openSheet(html) {
   stopAlertLiveFeed();
   sheetContent.innerHTML = html;
+  bindAllDecimalInputs(sheetContent);
   sheetEl.classList.add("open");
   sheetBackdrop.classList.add("open");
 }
@@ -326,7 +354,7 @@ async function handleTradeAction(t, act) {
 
 function openCloseSheet(t, kind) {
   const presets = kind === "BU"
-    ? ["0.5", "0.75", "1", "1.5", "2", "2.5", "3", "4", "5"]
+    ? ["0", "0.5", "0.75", "1", "1.5", "2", "2.5", "3", "4", "5"]
     : ["1", "1.5", "2", "2.5", "3", "4", "5", "6", "8", "10"];
   const needsRR = kind !== "SL";
   const label = { SL: "🛑 SL", BU: "🟡 B/U", TP: "🟢 TP" }[kind];
@@ -339,7 +367,7 @@ function openCloseSheet(t, kind) {
         <div class="pill-row" id="rrPills">
           ${presets.map((p) => `<button class="pill" data-rr="${p}">${p}R</button>`).join("")}
         </div>
-        <input type="number" step="0.01" inputmode="decimal" class="field-input" id="rrCustom" placeholder="Yoki qo'lda kiriting" style="margin-top:10px">
+        <input type="text" inputmode="decimal" data-decimal class="field-input" id="rrCustom" placeholder="Yoki qo'lda kiriting" style="margin-top:10px">
       </div>` : `<div class="hint-text">Natija: -1R</div>`}
     <div class="field">
       <label class="field-label">📸 Screenshot (ixtiyoriy)</label>
@@ -412,6 +440,46 @@ function setupUpload(box, input, onDone) {
 /* ---- Add trade ---- */
 document.querySelectorAll('[data-action="add-trade"]').forEach((el) => el.addEventListener("click", openAddTradeSheet));
 
+/* ---- Leverage calculator ---- */
+document.querySelectorAll('[data-action="leverage-calc"]').forEach((el) => el.addEventListener("click", openLeverageSheet));
+
+function openLeverageSheet() {
+  openSheet(`
+    <div class="sheet-title">🧮 Leverage Calculator</div>
+    <div class="field">
+      <label class="field-label">Entry'dan SL'gacha masofa (%)</label>
+      <input type="text" inputmode="decimal" data-decimal class="field-input" id="lcDistance" placeholder="2">
+    </div>
+    <div class="field">
+      <label class="field-label">Risk ($)</label>
+      <input type="text" inputmode="decimal" data-decimal class="field-input" id="lcRisk" placeholder="10">
+    </div>
+    <button class="primary-btn" id="lcCalcBtn">Hisoblash</button>
+    <div id="lcResults" style="margin-top:14px"></div>
+  `);
+
+  sheetContent.querySelector("#lcCalcBtn").addEventListener("click", async () => {
+    const sl_distance_percent = sheetContent.querySelector("#lcDistance").value;
+    const risk = sheetContent.querySelector("#lcRisk").value;
+    if (!sl_distance_percent || !risk || isNaN(parseFloat(sl_distance_percent)) || isNaN(parseFloat(risk))) {
+      toast("SL masofasi va riskni kiriting", "error");
+      return;
+    }
+    try {
+      const data = await api("/api/leverage", { method: "POST", body: { risk, sl_distance_percent } });
+      const box = sheetContent.querySelector("#lcResults");
+      box.innerHTML = data.results.map((r) => `
+        <div class="card-row">
+          <span class="card-row-label">${r.label} ($${fmtDec(r.margin)})</span>
+          <span class="card-row-value">${fmtDec(r.leverage)}X</span>
+        </div>
+      `).join("") + `<div class="hint-text" style="margin-top:8px">Position size: $${data.results[0] ? fmtDec(data.results[0].position_size) : "0"}</div>`;
+    } catch (e) {
+      toast(e.message, "error");
+    }
+  });
+}
+
 function openAddTradeSheet() {
   const riskPresets = ["0.5", "1", "1.5", "2", "2.5", "3"];
   openSheet(`
@@ -432,15 +500,15 @@ function openAddTradeSheet() {
       <div class="pill-row" id="riskPills">
         ${riskPresets.map((p) => `<button class="pill" data-risk="${p}">${p}%</button>`).join("")}
       </div>
-      <input type="number" step="0.01" inputmode="decimal" class="field-input" id="riskCustom" placeholder="Yoki qo'lda kiriting" style="margin-top:10px">
+      <input type="text" inputmode="decimal" data-decimal class="field-input" id="riskCustom" placeholder="Yoki qo'lda kiriting" style="margin-top:10px">
     </div>
     <div class="field">
       <label class="field-label">Entry narxi</label>
-      <input type="number" step="any" inputmode="decimal" class="field-input" id="tEntry" placeholder="105000">
+      <input type="text" inputmode="decimal" data-decimal class="field-input" id="tEntry" placeholder="105000">
     </div>
     <div class="field">
       <label class="field-label">Stop Loss narxi</label>
-      <input type="number" step="any" inputmode="decimal" class="field-input" id="tSL" placeholder="103500">
+      <input type="text" inputmode="decimal" data-decimal class="field-input" id="tSL" placeholder="103500">
     </div>
     <div class="field">
       <label class="field-label">📸 Screenshot (ixtiyoriy)</label>
@@ -1201,7 +1269,7 @@ document.getElementById("addAlertBtn").addEventListener("click", () => {
     </div>
     <div class="field">
       <label class="field-label">Maqsadli narx</label>
-      <input type="number" step="any" inputmode="decimal" class="field-input" id="aPrice" placeholder="112000">
+      <input type="text" inputmode="decimal" data-decimal class="field-input" id="aPrice" placeholder="112000">
     </div>
     <div class="hint-text">Narx joriy narxdan yuqori bo'lsa ⬆️, past bo'lsa ⬇️ yo'nalish avtomatik aniqlanadi.</div>
     <button class="primary-btn" id="createAlertBtn" style="margin-top:14px">Alert qo'yish</button>
@@ -1231,10 +1299,10 @@ document.getElementById("helpBtn").addEventListener("click", () => {
       <p><b>⏳ Pending</b><br>Hali faollashmagan tradelar. Activate (limit ishlaganda), Missed (bekor bo'lsa) yoki Delete qilishingiz mumkin.</p>
       <p><b>🟢 Active</b><br>Ochiq tradelar. Yopish: 🛑 SL (avtomatik -1R), 🟡 B/U yoki 🟢 TP (RR kiritib) — screenshot bilan.</p>
       <p><b>📊 Hisobot</b><br>Kunlik/Haftalik/Davr — equity curve, Win Rate, Profit Factor, Max Drawdown. Kalendar — har kunning R natijasi rangli ko'rinishda, kunni bosib o'sha kungi tradelarni ko'rish mumkin.</p>
-      <p><b>🧮 Leverage Calculator</b><br>SL masofasi (%) va risk ($) kiritib, kerakli leverage'ni hisoblaydi.</p>
+      <p><b>🧮 Leverage Calculator</b><br>Bosh sahifadagi "Leverage" tugmasi — SL masofasi (%) va risk ($) kiritsangiz, ⚙️ Sozlamalar'da saqlagan barcha marjalaringiz (Real, Prop va h.k.) uchun kerakli leverage'ni birdan hisoblab beradi.</p>
       <p><b>🗑 Oxirgi tradelar</b><br>Oxirgi 5 ta trade — xato kiritilganini butunlay o'chirish uchun.</p>
       <p><b>🔔 Alert</b><br>Coin va maqsadli narx kiriting — narx yetganda Telegram orqali xabar beramiz. Bosib jonli grafikni ko'rish mumkin.</p>
-      <p><b>⚙️ Sozlamalar</b><br>Margin o'zgartirish, va (admin uchun) backup/restore.</p>
+      <p><b>⚙️ Sozlamalar</b><br>Bir nechta marja (masalan Real, Prop) qo'shish/o'chirish, va (admin uchun) backup/restore.</p>
       <p class="hint-text">Botning o'zida ham istalgan vaqt <b>/help</b> yozib shu qo'llanmani ko'rishingiz mumkin.</p>
     </div>
   `);
@@ -1244,30 +1312,64 @@ async function loadSettings() {
   try {
     const me = await api("/api/me");
     state.me = me;
-    document.getElementById("marginValue").textContent = `$${fmtDec(me.margin)}`;
     document.getElementById("adminPanel").classList.toggle("hidden", !me.is_admin);
     document.getElementById("userChip").textContent = me.username ? "@" + me.username : "";
+    await loadMarginPresets();
   } catch (e) {
     toast(e.message, "error");
   }
 }
 
-document.getElementById("changeMarginBtn").addEventListener("click", () => {
+async function loadMarginPresets() {
+  try {
+    const presets = await api("/api/settings/margins");
+    const box = document.getElementById("marginPresetsList");
+    if (!presets.length) {
+      box.innerHTML = `<div class="hint-text">Hali marja saqlanmagan.</div>`;
+      return;
+    }
+    box.innerHTML = presets.map((p) => `
+      <div class="card-row">
+        <span class="card-row-label">${p.label}</span>
+        <span class="card-row-value">$${fmtDec(p.amount)}
+          <button class="icon-btn-del" data-del-margin="${p.id}">🗑</button>
+        </span>
+      </div>
+    `).join("");
+    box.querySelectorAll("[data-del-margin]").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        try {
+          await api(`/api/settings/margins/${btn.dataset.delMargin}`, { method: "DELETE" });
+          loadMarginPresets();
+        } catch (e) { toast(e.message, "error"); }
+      });
+    });
+  } catch (e) {
+    toast(e.message, "error");
+  }
+}
+
+document.getElementById("addMarginBtn").addEventListener("click", () => {
   openSheet(`
-    <div class="sheet-title">💵 Marginni o'zgartirish</div>
+    <div class="sheet-title">➕ Yangi marja</div>
     <div class="field">
-      <label class="field-label">Yangi margin ($)</label>
-      <input type="number" step="any" inputmode="decimal" class="field-input" id="newMargin" placeholder="500">
+      <label class="field-label">Nomi</label>
+      <input type="text" class="field-input" id="newMarginLabel" placeholder="Real, Prop, ...">
+    </div>
+    <div class="field">
+      <label class="field-label">Miqdori ($)</label>
+      <input type="text" inputmode="decimal" data-decimal class="field-input" id="newMargin" placeholder="500">
     </div>
     <button class="primary-btn" id="saveMarginBtn">Saqlash</button>
   `);
   sheetContent.querySelector("#saveMarginBtn").addEventListener("click", async () => {
+    const label = sheetContent.querySelector("#newMarginLabel").value.trim();
     const val = sheetContent.querySelector("#newMargin").value;
-    if (!val) { toast("Qiymat kiriting", "error"); return; }
+    if (!label || !val) { toast("Nom va qiymatni kiriting", "error"); return; }
     try {
-      await api("/api/settings/margin", { method: "POST", body: { margin: val } });
-      toast("✅ Margin saqlandi", "success");
-      closeSheet(); loadSettings();
+      await api("/api/settings/margins", { method: "POST", body: { label, amount: val } });
+      toast("✅ Marja qo'shildi", "success");
+      closeSheet(); loadMarginPresets();
     } catch (e) {
       toast(e.message, "error");
     }

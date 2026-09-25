@@ -99,6 +99,24 @@ class Trade(Base):
     user: Mapped["User"] = relationship(back_populates="trades")
 
 
+class MarginPreset(Base):
+    """A saved margin amount (e.g. 'Real': $50, 'Prop': $200). Lets the
+    leverage calculator (bot chat + Mini App) compute the required
+    leverage for every account at once instead of the user re-entering
+    a single margin and recalculating each time they switch accounts.
+    User.margin is kept as a legacy fallback for users with no presets."""
+
+    __tablename__ = "margin_presets"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True, nullable=False)
+
+    label: Mapped[str] = mapped_column(String(32), nullable=False)
+    amount: Mapped[Decimal] = mapped_column(Numeric(20, 2), nullable=False)
+
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
 class Backup(Base):
     __tablename__ = "backups"
 

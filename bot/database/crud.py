@@ -7,7 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from bot.config import settings
-from bot.database.models import Alert, AlertDirection, AlertStatus, Direction, ResultType, Trade, TradeStatus, User
+from bot.database.models import Alert, AlertDirection, AlertStatus, Direction, MarginPreset, ResultType, Trade, TradeStatus, User
 
 
 def _now() -> datetime:
@@ -45,6 +45,37 @@ async def update_margin(session: AsyncSession, user: User, margin: Decimal) -> U
     await session.commit()
     await session.refresh(user)
     return user
+
+
+# ---------------------------------------------------------------------------
+# Margin presets — multi-account leverage calculator
+# ---------------------------------------------------------------------------
+
+async def list_margin_presets(session: AsyncSession, user: User) -> list[MarginPreset]:
+    result = await session.execute(
+        select(MarginPreset).where(MarginPreset.user_id == user.id).order_by(MarginPreset.id)
+    )
+    return list(result.scalars().all())
+
+
+async def add_margin_preset(session: AsyncSession, user: User, label: str, amount: Decimal) -> MarginPreset:
+    preset = MarginPreset(user_id=user.id, label=label, amount=amount)
+    session.add(preset)
+    await session.commit()
+    await session.refresh(preset)
+    return preset
+
+
+async def delete_margin_preset(session: AsyncSession, user: User, preset_id: int) -> bool:
+    result = await session.execute(
+        select(MarginPreset).where(MarginPreset.id == preset_id, MarginPreset.user_id == user.id)
+    )
+    preset = result.scalar_one_or_none()
+    if preset is None:
+        return False
+    await session.delete(preset)
+    await session.commit()
+    return True
 
 
 # ---------------------------------------------------------------------------

@@ -3,10 +3,12 @@ from __future__ import annotations
 from aiogram import Router
 from aiogram.fsm.context import FSMContext
 from aiogram.types import Message
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from bot.database.crud import list_margin_presets
 from bot.database.models import User
 from bot.keyboards.inline import cancel_button
-from bot.services.leverage_calc import calculate_leverage, format_leverage_result
+from bot.services.leverage_calc import calculate_leverage, calculate_leverage_for_presets, format_leverage_result, format_leverage_results_multi
 from bot.states.trade_states import LeverageCalc
 from bot.utils.formatting import parse_decimal, safe_handler
 
@@ -29,7 +31,7 @@ async def got_distance(message: Message, state: FSMContext) -> None:
 
 @router.message(LeverageCalc.risk_amount)
 @safe_handler
-async def got_risk_amount(message: Message, state: FSMContext, user: User) -> None:
+async def got_risk_amount(message: Message, state: FSMContext, user: User, session: AsyncSession) -> None:
     from decimal import Decimal
 
     risk = parse_decimal(message.text)
@@ -37,5 +39,10 @@ async def got_risk_amount(message: Message, state: FSMContext, user: User) -> No
     distance = Decimal(data["distance"])
     await state.clear()
 
-    result = calculate_leverage(margin=user.margin, risk=risk, sl_distance_percent=distance)
-    await message.answer(format_leverage_result(result))
+    presets = await list_margin_presets(session, user)
+    if presets:
+        results = calculate_leverage_for_presets(risk, distance, [(p.label, p.amount) for p in presets])
+        await message.answer(format_leverage_results_multi(risk, distance, results))
+    else:
+        result = calculate_leverage(margin=user.margin, risk=risk, sl_distance_percent=distance)
+        await message.answer(format_leverage_result(result))

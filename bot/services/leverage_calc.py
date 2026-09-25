@@ -51,3 +51,26 @@ def format_leverage_result(r: LeverageResult) -> str:
         "Position Size = Risk / SL%\n"
         "Leverage = Position Size / Margin"
     )
+
+
+def calculate_leverage_for_presets(
+    risk: Decimal, sl_distance_percent: Decimal, presets: list[tuple[str, Decimal]]
+) -> list[tuple[str, LeverageResult]]:
+    """One LeverageResult per (label, margin) preset, same risk/SL for
+    all of them - so switching between e.g. a real account and a prop
+    account no longer means re-entering margin and recalculating twice."""
+    return [(label, calculate_leverage(margin=margin, risk=risk, sl_distance_percent=sl_distance_percent))
+            for label, margin in presets]
+
+
+def format_leverage_results_multi(risk: Decimal, sl_distance_percent: Decimal, results: list[tuple[str, LeverageResult]]) -> str:
+    lines = [
+        "🧮 LEVERAGE CALCULATOR",
+        "",
+        f"Risk: ${dec_str(risk)}",
+        f"SL Distance: {dec_str(sl_distance_percent)}%",
+        "",
+    ]
+    for label, r in results:
+        lines.append(f"• {label} (${dec_str(r.margin)}) → {dec_str(r.leverage)}X (position: ${dec_str(r.position_size)})")
+    return "\n".join(lines)

@@ -77,6 +77,9 @@
         <button class="quick-btn" data-nav="reports">
           <span class="qi icon-blue">📊</span><span>Hisobot</span>
         </button>
+        <button class="quick-btn" data-action="leverage-calc">
+          <span class="qi icon-purple">🧮</span><span>Leverage</span>
+        </button>
       </div>
 
       <div id="dashAlerts" class="card-list"></div>
@@ -163,11 +166,9 @@
       <button class="btn-small full-w" id="helpBtn" style="margin-bottom:12px">📖 Qo'llanma</button>
 
       <div class="card">
-        <div class="card-row">
-          <span class="card-row-label">💵 Margin</span>
-          <span id="marginValue" class="card-row-value">$500</span>
-        </div>
-        <button class="btn-small full-w" id="changeMarginBtn">O'zgartirish</button>
+        <div class="card-row"><span class="card-row-label">💼 Marja presetlari</span></div>
+        <div id="marginPresetsList" class="card-list" style="margin:8px 0"></div>
+        <button class="btn-small full-w" id="addMarginBtn">➕ Yangi marja qo'shish</button>
       </div>
 
       <div id="adminPanel" class="card hidden">
