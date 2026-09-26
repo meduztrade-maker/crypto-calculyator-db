@@ -9,18 +9,11 @@ from bot.database.crud import TradeStateError, cancel_alert, create_alert, get_u
 from bot.database.models import User
 from bot.keyboards.inline import AlertCB, NavCB, alert_detail_keyboard, alerts_menu, cancel_button
 from bot.services.price_feed import PriceLookupError, get_price
+from bot.services.symbol_resolve import normalize_symbol as _normalize_symbol
 from bot.states.trade_states import AlertCreate
 from bot.utils.formatting import InputError, dec_str, parse_decimal, safe_handler
 
 router = Router(name="alerts")
-
-
-def _normalize_symbol(raw: str) -> str:
-    coin = raw.strip().upper().replace(" ", "")
-    known_quotes = ("USDT", "USDC", "BUSD", "BTC", "ETH", "FDUSD", "TRY", "EUR")
-    if not coin.endswith(known_quotes):
-        coin += "USDT"
-    return coin
 
 
 async def _alerts_content(session: AsyncSession, user: User):

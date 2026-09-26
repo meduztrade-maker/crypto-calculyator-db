@@ -6,18 +6,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from bot.database.crud import TradeStateError, cancel_alert, create_alert, list_active_alerts
 from bot.database.models import User
 from bot.services.price_feed import PriceLookupError, get_klines, get_price
+from bot.services.symbol_resolve import normalize_symbol as _normalize_symbol
 from webapp.deps import get_current_user, get_session
 from webapp.schemas import AlertCreateIn, AlertOut
 
 router = APIRouter(prefix="/api/alerts", tags=["alerts"])
-
-
-def _normalize_symbol(raw: str) -> str:
-    coin = raw.strip().upper().replace(" ", "")
-    known_quotes = ("USDT", "USDC", "BUSD", "BTC", "ETH", "FDUSD", "TRY", "EUR")
-    if not coin.endswith(known_quotes):
-        coin += "USDT"
-    return coin
 
 
 @router.get("", response_model=list[AlertOut])
