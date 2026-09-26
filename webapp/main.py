@@ -57,4 +57,11 @@ app.mount("/static", StaticFiles(directory=_STATIC_DIR), name="static")
 
 @app.get("/")
 async def index():
-    return FileResponse(os.path.join(_STATIC_DIR, "index.html"))
+    # Telegram's Mini App WebView can cache this page aggressively with no
+    # explicit header telling it not to - meaning a server-side deploy alone
+    # doesn't guarantee the user actually sees the new version. Force a
+    # fresh fetch every time the Mini App is opened.
+    return FileResponse(
+        os.path.join(_STATIC_DIR, "index.html"),
+        headers={"Cache-Control": "no-store, no-cache, must-revalidate", "Pragma": "no-cache"},
+    )
