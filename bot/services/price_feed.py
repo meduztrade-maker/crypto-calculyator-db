@@ -7,7 +7,7 @@ import aiohttp
 
 logger = logging.getLogger("meduz_bot")
 
-_TICKER_URL = "https://api.binance.com/api/v3/ticker/price"
+_TICKER_URL = "https://data-api.binance.vision/api/v3/ticker/price"
 _TIMEOUT = aiohttp.ClientTimeout(total=10)
 
 
@@ -19,10 +19,16 @@ async def get_price(symbol: str) -> Decimal:
     """Fetch a single symbol's current price. Used to validate a coin when creating an alert."""
     symbol = symbol.strip().upper()
     async with aiohttp.ClientSession(timeout=_TIMEOUT) as http:
-        async with http.get(_TICKER_URL, params={"symbol": symbol}) as resp:
-            if resp.status != 200:
-                raise PriceLookupError(f"{symbol} topilmadi (Binance'da mavjud emas)")
-            data = await resp.json()
+        try:
+            async with http.get(_TICKER_URL, params={"symbol": symbol}) as resp:
+                if resp.status != 200:
+                    body = await resp.text()
+                    logger.error("Binance ticker FAILED for %s: HTTP %s - %s", symbol, resp.status, body[:300])
+                    raise PriceLookupError(f"{symbol} topilmadi (Binance'da mavjud emas)")
+                data = await resp.json()
+        except aiohttp.ClientError as exc:
+            logger.error("Binance ticker CONNECTION ERROR for %s: %s", symbol, exc)
+            raise PriceLookupError(f"{symbol}: Binance'ga ulanib bo'lmadi ({exc})")
     try:
         return Decimal(data["price"])
     except (KeyError, InvalidOperation):
@@ -50,7 +56,7 @@ async def get_all_prices() -> dict[str, Decimal]:
     return prices
 
 
-_KLINES_URL = "https://api.binance.com/api/v3/klines"
+_KLINES_URL = "https://data-api.binance.vision/api/v3/klines"
 
 
 async def get_klines(symbol: str, interval: str = "15m", limit: int = 96) -> list[dict]:
