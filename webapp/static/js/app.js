@@ -1,6 +1,22 @@
 "use strict";
 
 /* ============================================================
+   Shared color tokens (mirrors :root in style.css). Canvas/Chart.js
+   and inline-styled elements can't read CSS custom properties, so
+   this is the one other place a color literal is allowed to live -
+   change a palette color here AND in style.css, never inline.
+   ============================================================ */
+const THEME = {
+  bg: "#0a0a0a",
+  border: "#292929",
+  textDim: "#949494",
+  green: "#34d399",
+  red: "#f87171",
+  gray: "#6b6b6b",
+  accent: "#c8f751",
+};
+
+/* ============================================================
    Telegram WebApp bootstrap
    ============================================================ */
 const tg = window.Telegram ? window.Telegram.WebApp : null;
@@ -8,8 +24,8 @@ if (tg) {
   tg.ready();
   tg.expand();
   try {
-    tg.setHeaderColor("#0b0f14");
-    tg.setBackgroundColor("#0b0f14");
+    tg.setHeaderColor(THEME.bg);
+    tg.setBackgroundColor(THEME.bg);
   } catch (e) { /* older client, ignore */ }
 }
 const INIT_DATA = tg ? tg.initData : "";
@@ -636,7 +652,7 @@ function renderReport(stats) {
   const ctx = equityCanvas.getContext("2d");
   const values = [0, ...stats.equity_curve.map(n)];
   const positive = values[values.length - 1] >= 0;
-  const lineColor = positive ? "#2ecc71" : "#ef4444";
+  const lineColor = positive ? THEME.green : THEME.red;
   const fillColor = positive ? "rgba(46,204,113,0.18)" : "rgba(239,68,68,0.18)";
 
   if (equityChart) equityChart.destroy();
@@ -661,8 +677,8 @@ function renderReport(stats) {
       scales: {
         x: { display: false },
         y: {
-          grid: { color: "#212a35" },
-          ticks: { color: "#8b96a5", font: { size: 11 } },
+          grid: { color: THEME.border },
+          ticks: { color: THEME.textDim, font: { size: 11 } },
         },
       },
     },
@@ -688,13 +704,13 @@ function renderReport(stats) {
   // Composition bar
   const total = Math.max(stats.wins + stats.losses + stats.breakeven, 1);
   document.getElementById("compBar").innerHTML = `
-    <div style="width:${(stats.wins / total) * 100}%; background:#2ecc71"></div>
-    <div style="width:${(stats.breakeven / total) * 100}%; background:#8b96a5"></div>
-    <div style="width:${(stats.losses / total) * 100}%; background:#ef4444"></div>`;
+    <div style="width:${(stats.wins / total) * 100}%; background:${THEME.green}"></div>
+    <div style="width:${(stats.breakeven / total) * 100}%; background:${THEME.gray}"></div>
+    <div style="width:${(stats.losses / total) * 100}%; background:${THEME.red}"></div>`;
   document.getElementById("compLegend").innerHTML = `
-    <span><span class="leg-dot" style="background:#2ecc71"></span>${stats.wins} Win</span>
-    <span><span class="leg-dot" style="background:#8b96a5"></span>${stats.breakeven} B/U</span>
-    <span><span class="leg-dot" style="background:#ef4444"></span>${stats.losses} Loss</span>`;
+    <span><span class="leg-dot" style="background:${THEME.green}"></span>${stats.wins} Win</span>
+    <span><span class="leg-dot" style="background:${THEME.gray}"></span>${stats.breakeven} B/U</span>
+    <span><span class="leg-dot" style="background:${THEME.red}"></span>${stats.losses} Loss</span>`;
 
   // Coins list
   const coinsList = document.getElementById("coinsList");
