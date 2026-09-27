@@ -135,6 +135,46 @@ main#screens { flex: 1; padding: 4px 16px calc(96px + var(--safe-bottom)); }
 .icon-btn-del { background: none; border: none; font-size: 14px; margin-left: 8px; padding: 2px 4px; cursor: pointer; opacity: 0.7; }
 .icon-btn-del:active { opacity: 1; }
 
+/* ---------- Margin presets (multi-account leverage) ---------- */
+.margin-preset-card {
+  display: flex; align-items: center; gap: 12px;
+  background: var(--card-alt); border: 1px solid var(--border); border-radius: var(--radius-md);
+  padding: 12px 12px; margin-bottom: 8px;
+}
+.row-icon {
+  width: 32px; height: 32px; border-radius: 10px; flex: none;
+  display: flex; align-items: center; justify-content: center; font-size: 15px;
+}
+.margin-preset-info { flex: 1; min-width: 0; }
+.margin-preset-label { font-weight: 700; font-size: 14.5px; }
+.margin-preset-amount { font-size: 12.5px; color: var(--text-dim); margin-top: 2px; }
+.margin-preset-del {
+  background: none; border: none; width: 32px; height: 32px; border-radius: 10px;
+  display: flex; align-items: center; justify-content: center; font-size: 15px;
+  color: var(--text-faint); cursor: pointer; flex: none; transition: background 0.15s ease, color 0.15s ease;
+}
+.margin-preset-del:active { background: rgba(239,68,68,0.14); color: var(--red); }
+.margin-preset-empty { text-align: center; padding: 20px 12px; color: var(--text-dim); font-size: 13.5px; }
+.add-preset-btn {
+  width: 100%; padding: 12px; border-radius: var(--radius-md);
+  border: 1.5px dashed var(--border); background: transparent; color: var(--accent);
+  font-weight: 700; font-size: 14px; cursor: pointer; margin-top: 2px;
+  transition: background 0.15s ease, transform 0.12s ease;
+}
+.add-preset-btn:active { background: var(--accent-dim); transform: scale(0.98); }
+
+/* ---------- Leverage calculator result cards ---------- */
+.leverage-result-card {
+  display: flex; align-items: center; gap: 12px;
+  background: var(--card-alt); border: 1px solid var(--border); border-radius: var(--radius-md);
+  padding: 13px 14px; margin-bottom: 8px;
+}
+.leverage-result-info { flex: 1; min-width: 0; }
+.leverage-result-label { font-size: 13.5px; font-weight: 700; }
+.leverage-result-margin { font-size: 12px; color: var(--text-faint); margin-top: 1px; }
+.leverage-result-value { font-size: 21px; font-weight: 800; color: var(--accent); flex: none; }
+.leverage-position-note { text-align: center; font-size: 12.5px; color: var(--text-dim); margin-top: 12px; }
+
 /* ---------- Chart card ---------- */
 .chart-card {
   background: var(--card); border: 1px solid var(--border); border-radius: var(--radius-lg);

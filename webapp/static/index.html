@@ -4,9 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>MEDUZ Trading Journal</title>
-<link rel="stylesheet" href="/static/css/style.css?v=2">
+<link rel="stylesheet" href="/static/css/style.css?v=3">
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
-<script src="/static/js/chart.umd.js?v=2"></script>
+<script src="/static/js/chart.umd.js?v=3"></script>
 </head>
 <body>
 
@@ -166,9 +166,9 @@
       <button class="btn-small full-w" id="helpBtn" style="margin-bottom:12px">📖 Qo'llanma</button>
 
       <div class="card">
-        <div class="card-row"><span class="card-row-label">💼 Marja presetlari</span></div>
-        <div id="marginPresetsList" class="card-list" style="margin:8px 0"></div>
-        <button class="btn-small full-w" id="addMarginBtn">➕ Yangi marja qo'shish</button>
+        <div class="section-title" style="margin-top:0">💼 Marja presetlari</div>
+        <div id="marginPresetsList"></div>
+        <button class="add-preset-btn" id="addMarginBtn">➕ Yangi marja qo'shish</button>
       </div>
 
       <div id="adminPanel" class="card hidden">
@@ -210,6 +210,6 @@
 
 <div id="toast" class="toast"></div>
 
-<script src="/static/js/app.js?v=2"></script>
+<script src="/static/js/app.js?v=3"></script>
 </body>
 </html>

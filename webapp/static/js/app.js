@@ -468,12 +468,16 @@ function openLeverageSheet() {
     try {
       const data = await api("/api/leverage", { method: "POST", body: { risk, sl_distance_percent } });
       const box = sheetContent.querySelector("#lcResults");
-      box.innerHTML = data.results.map((r) => `
-        <div class="card-row">
-          <span class="card-row-label">${r.label} ($${fmtDec(r.margin)})</span>
-          <span class="card-row-value">${fmtDec(r.leverage)}X</span>
+      box.innerHTML = data.results.map((r, i) => `
+        <div class="leverage-result-card">
+          <div class="row-icon ${PRESET_ICON_CLASSES[i % PRESET_ICON_CLASSES.length]}">💰</div>
+          <div class="leverage-result-info">
+            <div class="leverage-result-label">${r.label}</div>
+            <div class="leverage-result-margin">$${fmtDec(r.margin)} margin</div>
+          </div>
+          <div class="leverage-result-value">${fmtDec(r.leverage)}X</div>
         </div>
-      `).join("") + `<div class="hint-text" style="margin-top:8px">Position size: $${data.results[0] ? fmtDec(data.results[0].position_size) : "0"}</div>`;
+      `).join("") + `<div class="leverage-position-note">📊 Position size: $${data.results[0] ? fmtDec(data.results[0].position_size) : "0"}</div>`;
     } catch (e) {
       toast(e.message, "error");
     }
@@ -1320,20 +1324,24 @@ async function loadSettings() {
   }
 }
 
+const PRESET_ICON_CLASSES = ["icon-blue", "icon-purple", "icon-teal", "icon-amber", "icon-green"];
+
 async function loadMarginPresets() {
   try {
     const presets = await api("/api/settings/margins");
     const box = document.getElementById("marginPresetsList");
     if (!presets.length) {
-      box.innerHTML = `<div class="hint-text">Hali marja saqlanmagan.</div>`;
+      box.innerHTML = `<div class="margin-preset-empty">💤 Hali marja saqlanmagan.<br>Masalan: Real — $50, Prop — $200.</div>`;
       return;
     }
-    box.innerHTML = presets.map((p) => `
-      <div class="card-row">
-        <span class="card-row-label">${p.label}</span>
-        <span class="card-row-value">$${fmtDec(p.amount)}
-          <button class="icon-btn-del" data-del-margin="${p.id}">🗑</button>
-        </span>
+    box.innerHTML = presets.map((p, i) => `
+      <div class="margin-preset-card">
+        <div class="row-icon ${PRESET_ICON_CLASSES[i % PRESET_ICON_CLASSES.length]}">💰</div>
+        <div class="margin-preset-info">
+          <div class="margin-preset-label">${p.label}</div>
+          <div class="margin-preset-amount">$${fmtDec(p.amount)} margin</div>
+        </div>
+        <button class="margin-preset-del" data-del-margin="${p.id}">🗑</button>
       </div>
     `).join("");
     box.querySelectorAll("[data-del-margin]").forEach((btn) => {
