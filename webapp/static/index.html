@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <meta name="theme-color" content="#0a0a0a">
 <title>MEDUZ Trading Journal</title>
-<link rel="stylesheet" href="/static/css/style.css?v=4">
+<link rel="stylesheet" href="/static/css/style.css?v=5">
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
-<script src="/static/js/chart.umd.js?v=4"></script>
+<script src="/static/js/chart.umd.js?v=5"></script>
 </head>
 <body>
 
@@ -28,9 +28,24 @@
     <!-- DASHBOARD -->
     <section id="screen-dashboard" class="screen active">
       <div class="hero-card">
-        <div class="hero-label">BUGUNGI NATIJA</div>
+        <div class="hero-label">Bugungi natija</div>
         <div id="heroR" class="hero-r">+0R</div>
         <div id="heroSub" class="hero-sub">0 trade · 0% win rate</div>
+      </div>
+
+      <button class="primary-btn" data-action="add-trade">➕ Trade qo'shish</button>
+
+      <div class="status-strip">
+        <button class="status-tile" data-nav="trades" data-sub="pending">
+          <span class="status-tile-icon icon-amber">⏳</span>
+          <span class="status-tile-label">Pending</span>
+          <span id="qPendingCount" class="status-tile-count">0</span>
+        </button>
+        <button class="status-tile" data-nav="trades" data-sub="active">
+          <span class="status-tile-icon icon-teal">🟢</span>
+          <span class="status-tile-label">Active</span>
+          <span id="qActiveCount" class="status-tile-count">0</span>
+        </button>
       </div>
 
       <div class="mini-stat-row">
@@ -56,30 +71,22 @@
           </div>
         </div>
         <div class="ring-legend">
-          <div class="ring-legend-title">HAFTALIK</div>
+          <div class="ring-legend-title">Haftalik</div>
           <div><span class="leg-dot" style="background:var(--green)"></span>Win <b id="ringWins">0</b></div>
           <div><span class="leg-dot" style="background:var(--red)"></span>Loss <b id="ringLosses">0</b></div>
           <div><span class="leg-dot" style="background:var(--gray)"></span>B/U <b id="ringBE">0</b></div>
         </div>
       </div>
 
-      <div class="quick-grid">
-        <button class="quick-btn" data-action="add-trade">
-          <span class="qi icon-green">➕</span><span>Trade qo'shish</span>
-        </button>
-        <button class="quick-btn" data-nav="trades" data-sub="pending">
-          <span class="qi icon-amber">⏳</span><span>Pending</span>
-          <span id="qPendingCount" class="qbadge">0</span>
-        </button>
-        <button class="quick-btn" data-nav="trades" data-sub="active">
-          <span class="qi icon-teal">🟢</span><span>Active</span>
-          <span id="qActiveCount" class="qbadge">0</span>
-        </button>
-        <button class="quick-btn" data-nav="reports">
-          <span class="qi icon-blue">📊</span><span>Hisobot</span>
-        </button>
-        <button class="quick-btn" data-action="leverage-calc">
-          <span class="qi icon-purple">🧮</span><span>Leverage</span>
+      <div class="section-title">Asboblar</div>
+      <div class="tool-row">
+        <button class="tool-tile" data-action="leverage-calc">
+          <span class="tool-tile-icon icon-purple">🧮</span>
+          <span class="tool-tile-text">
+            <span class="tool-tile-title">Leverage Calculator</span>
+            <span class="tool-tile-sub">Marjalaringiz bo'yicha kerakli leverage</span>
+          </span>
+          <span class="tool-tile-arrow">›</span>
         </button>
       </div>
 
@@ -114,7 +121,7 @@
 
       <div id="reportPeriodView">
         <div class="hero-card">
-          <div id="repLabel" class="hero-label">DAILY PERFORMANCE</div>
+          <div id="repLabel" class="hero-label">Kunlik natija</div>
           <div id="repR" class="hero-r">+0R</div>
           <div class="streak-row">
             <span id="repSub" class="hero-sub">0 trade · 0% win rate</span>
@@ -123,7 +130,7 @@
         </div>
 
         <div class="chart-card">
-          <div class="chart-card-title">EQUITY CURVE</div>
+          <div class="chart-card-title">Equity curve</div>
           <canvas id="equityChart" height="180"></canvas>
         </div>
 
@@ -134,13 +141,13 @@
           <div class="composition-bar" id="compBar"></div>
         </div>
 
-        <div class="section-title">COINS</div>
+        <div class="section-title">Coins</div>
         <div id="coinsList" class="card-list"></div>
       </div>
 
       <div id="calendarView" class="hidden">
         <div class="hero-card">
-          <div id="calMonthLabel" class="hero-label">SENTABR 2026</div>
+          <div id="calMonthLabel" class="hero-label">Sentabr 2026</div>
           <div id="calMonthR" class="hero-r">+0R</div>
           <div class="hero-sub" id="calMonthSub">0 trade</div>
         </div>
@@ -211,6 +218,6 @@
 
 <div id="toast" class="toast"></div>
 
-<script src="/static/js/app.js?v=4"></script>
+<script src="/static/js/app.js?v=5"></script>
 </body>
 </html>
