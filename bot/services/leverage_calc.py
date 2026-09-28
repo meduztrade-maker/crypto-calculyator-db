@@ -39,38 +39,25 @@ def calculate_leverage(margin: Decimal, risk: Decimal, sl_distance_percent: Deci
     )
 
 
-def format_leverage_result(r: LeverageResult) -> str:
-    return (
-        "🧮 LEVERAGE CALCULATOR\n\n"
-        f"Margin: ${dec_str(r.margin)}\n\n"
-        f"Risk: ${dec_str(r.risk)}\n\n"
-        f"SL Distance: {dec_str(r.sl_distance_percent)}%\n\n"
-        f"Required Leverage: {dec_str(r.leverage)}X\n\n"
-        "Formula:\n"
-        "Risk = Position Size × SL%\n"
-        "Position Size = Risk / SL%\n"
-        "Leverage = Position Size / Margin"
-    )
-
-
-def calculate_leverage_for_presets(
-    risk: Decimal, sl_distance_percent: Decimal, presets: list[tuple[str, Decimal]]
+def calculate_leverage_for_accounts(
+    accounts: list[tuple[str, Decimal, Decimal]], sl_distance_percent: Decimal
 ) -> list[tuple[str, LeverageResult]]:
-    """One LeverageResult per (label, margin) preset, same risk/SL for
-    all of them - so switching between e.g. a real account and a prop
-    account no longer means re-entering margin and recalculating twice."""
-    return [(label, calculate_leverage(margin=margin, risk=risk, sl_distance_percent=sl_distance_percent))
-            for label, margin in presets]
-
-
-def format_leverage_results_multi(risk: Decimal, sl_distance_percent: Decimal, results: list[tuple[str, LeverageResult]]) -> str:
-    lines = [
-        "🧮 LEVERAGE CALCULATOR",
-        "",
-        f"Risk: ${dec_str(risk)}",
-        f"SL Distance: {dec_str(sl_distance_percent)}%",
-        "",
+    """accounts: (label, margin, risk) triples. Each account gets its OWN
+    risk $ - a $50 account and a $500 account should never share one
+    risk amount, since the same dollar figure is a wildly different
+    percentage of each. SL distance is the one thing shared across
+    accounts, since it comes from the market setup, not account size."""
+    return [
+        (label, calculate_leverage(margin=margin, risk=risk, sl_distance_percent=sl_distance_percent))
+        for label, margin, risk in accounts
     ]
+
+
+def format_leverage_results_multi(sl_distance_percent: Decimal, results: list[tuple[str, LeverageResult]]) -> str:
+    lines = ["🧮 LEVERAGE CALCULATOR", "", f"SL Distance: {dec_str(sl_distance_percent)}%", ""]
     for label, r in results:
-        lines.append(f"• {label} (${dec_str(r.margin)}) → {dec_str(r.leverage)}X (position: ${dec_str(r.position_size)})")
+        lines.append(
+            f"• {label}: margin ${dec_str(r.margin)}, risk ${dec_str(r.risk)} "
+            f"→ {dec_str(r.leverage)}X (position: ${dec_str(r.position_size)})"
+        )
     return "\n".join(lines)

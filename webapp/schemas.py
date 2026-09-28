@@ -48,29 +48,26 @@ class TradeCloseIn(BaseModel):
     screenshot_file_id: Optional[str] = None
 
 
-class LeverageIn(BaseModel):
-    risk: Decimal
-    sl_distance_percent: Decimal
-    margin: Optional[Decimal] = None
-
-
-class LeverageOut(BaseModel):
+class LeverageAccountIn(BaseModel):
+    label: str
     margin: Decimal
     risk: Decimal
+
+
+class LeverageIn(BaseModel):
     sl_distance_percent: Decimal
-    position_size: Decimal
-    leverage: Decimal
+    accounts: list[LeverageAccountIn]
 
 
 class LeverageResultItem(BaseModel):
     label: str
     margin: Decimal
+    risk: Decimal
     position_size: Decimal
     leverage: Decimal
 
 
 class LeverageMultiOut(BaseModel):
-    risk: Decimal
     sl_distance_percent: Decimal
     results: list[LeverageResultItem]
 

@@ -459,41 +459,84 @@ document.querySelectorAll('[data-action="add-trade"]').forEach((el) => el.addEve
 /* ---- Leverage calculator ---- */
 document.querySelectorAll('[data-action="leverage-calc"]').forEach((el) => el.addEventListener("click", openLeverageSheet));
 
-function openLeverageSheet() {
+async function openLeverageSheet() {
+  let presets = [];
+  try {
+    presets = await api("/api/settings/margins");
+  } catch (e) {
+    toast(e.message, "error");
+  }
+  const hasPresets = presets.length > 0;
+
+  const accountFieldsHtml = hasPresets
+    ? presets.map((p) => `
+        <div class="field">
+          <label class="field-label">${p.label} ($${fmtDec(p.amount)} margin) — risk $</label>
+          <input type="text" inputmode="decimal" data-decimal class="field-input lc-risk" data-label="${p.label}" data-margin="${p.amount}" placeholder="10">
+        </div>
+      `).join("")
+    : `
+        <div class="field">
+          <label class="field-label">Margin ($)</label>
+          <input type="text" inputmode="decimal" data-decimal class="field-input" id="lcMargin" placeholder="500">
+        </div>
+        <div class="field">
+          <label class="field-label">Risk ($)</label>
+          <input type="text" inputmode="decimal" data-decimal class="field-input" id="lcRisk" placeholder="10">
+        </div>
+      `;
+
   openSheet(`
     <div class="sheet-title">🧮 Leverage Calculator</div>
     <div class="field">
       <label class="field-label">Entry'dan SL'gacha masofa (%)</label>
       <input type="text" inputmode="decimal" data-decimal class="field-input" id="lcDistance" placeholder="2">
     </div>
-    <div class="field">
-      <label class="field-label">Risk ($)</label>
-      <input type="text" inputmode="decimal" data-decimal class="field-input" id="lcRisk" placeholder="10">
-    </div>
+    ${accountFieldsHtml}
+    ${hasPresets ? `<div class="hint-text" style="margin-bottom:10px">💡 Har bir hisob uchun alohida risk kiriting — hajmi boshqa bo'lgani uchun bir xil $ risk mos kelmaydi.</div>` : ""}
     <button class="primary-btn" id="lcCalcBtn">Hisoblash</button>
-    <div id="lcResults" style="margin-top:14px"></div>
+    <div id="lcResults" style="margin-top:4px"></div>
   `);
 
   sheetContent.querySelector("#lcCalcBtn").addEventListener("click", async () => {
     const sl_distance_percent = sheetContent.querySelector("#lcDistance").value;
-    const risk = sheetContent.querySelector("#lcRisk").value;
-    if (!sl_distance_percent || !risk || isNaN(parseFloat(sl_distance_percent)) || isNaN(parseFloat(risk))) {
-      toast("SL masofasi va riskni kiriting", "error");
+    if (!sl_distance_percent || isNaN(parseFloat(sl_distance_percent))) {
+      toast("SL masofasini kiriting", "error");
       return;
     }
+
+    let accounts;
+    if (hasPresets) {
+      accounts = [];
+      for (const el of sheetContent.querySelectorAll(".lc-risk")) {
+        if (!el.value) continue; // skipping an account this time is fine
+        if (isNaN(parseFloat(el.value))) { toast("Noto'g'ri risk qiymati", "error"); return; }
+        accounts.push({ label: el.dataset.label, margin: el.dataset.margin, risk: el.value });
+      }
+      if (!accounts.length) { toast("Kamida bitta hisob uchun risk kiriting", "error"); return; }
+    } else {
+      const margin = sheetContent.querySelector("#lcMargin").value;
+      const risk = sheetContent.querySelector("#lcRisk").value;
+      if (!margin || !risk || isNaN(parseFloat(margin)) || isNaN(parseFloat(risk))) {
+        toast("Margin va riskni kiriting", "error");
+        return;
+      }
+      accounts = [{ label: "Margin", margin, risk }];
+    }
+
     try {
-      const data = await api("/api/leverage", { method: "POST", body: { risk, sl_distance_percent } });
+      const data = await api("/api/leverage", { method: "POST", body: { sl_distance_percent, accounts } });
       const box = sheetContent.querySelector("#lcResults");
       box.innerHTML = data.results.map((r, i) => `
         <div class="leverage-result-card">
           <div class="row-icon ${PRESET_ICON_CLASSES[i % PRESET_ICON_CLASSES.length]}">💰</div>
           <div class="leverage-result-info">
             <div class="leverage-result-label">${r.label}</div>
-            <div class="leverage-result-margin">$${fmtDec(r.margin)} margin</div>
+            <div class="leverage-result-margin">$${fmtDec(r.margin)} margin · $${fmtDec(r.risk)} risk</div>
           </div>
           <div class="leverage-result-value">${fmtDec(r.leverage)}X</div>
         </div>
-      `).join("") + `<div class="leverage-position-note">📊 Position size: $${data.results[0] ? fmtDec(data.results[0].position_size) : "0"}</div>`;
+      `).join("");
     } catch (e) {
       toast(e.message, "error");
     }
