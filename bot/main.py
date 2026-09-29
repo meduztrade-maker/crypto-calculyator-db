@@ -24,6 +24,7 @@ from bot.handlers import (
     trade_create,
 )
 from bot.middlewares.db import DbSessionMiddleware
+from bot.middlewares.subscription import SubscriptionMiddleware
 from bot.services.alert_checker import check_and_notify_alerts
 from bot.services.backup import run_backup
 
@@ -34,6 +35,8 @@ logger = logging.getLogger("meduz_bot")
 def build_dispatcher() -> Dispatcher:
     dp = Dispatcher()
 
+    dp.message.middleware(SubscriptionMiddleware())
+    dp.callback_query.middleware(SubscriptionMiddleware())
     dp.message.middleware(DbSessionMiddleware())
     dp.callback_query.middleware(DbSessionMiddleware())
 

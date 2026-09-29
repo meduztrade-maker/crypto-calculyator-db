@@ -28,16 +28,21 @@ MENU_SETTINGS = "⚙️ Sozlamalar"
 MENU_HELP = "📖 Qo'llanma"
 
 MENU_LABELS = [
-    MENU_ADD_TRADE, MENU_PENDING, MENU_ACTIVE, MENU_REPORTS,
-    MENU_LEVERAGE, MENU_RECENT, MENU_ALERTS, MENU_SETTINGS, MENU_HELP,
+    MENU_ADD_TRADE,
+    MENU_PENDING, MENU_ACTIVE,
+    MENU_REPORTS, MENU_LEVERAGE,
+    MENU_ALERTS, MENU_SETTINGS,
+    MENU_RECENT, MENU_HELP,
 ]
 
 
 def main_reply_keyboard() -> ReplyKeyboardMarkup:
+    # Trade qo'shish alone on its own row (it's the single most frequent
+    # action), then status/tools/settings/utility grouped in logical pairs.
     b = ReplyKeyboardBuilder()
     for label in MENU_LABELS:
         b.button(text=label)
-    b.adjust(2, 2, 2, 2, 1)
+    b.adjust(1, 2, 2, 2, 2)
     return b.as_markup(resize_keyboard=True)
 
 

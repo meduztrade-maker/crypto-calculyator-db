@@ -41,6 +41,7 @@ class Settings:
     timezone: str = field(default_factory=lambda: os.getenv("TIMEZONE", "Asia/Tashkent"))
     default_margin: str = field(default_factory=lambda: os.getenv("DEFAULT_MARGIN", "500"))
     webapp_url: str | None = field(default_factory=lambda: os.getenv("WEBAPP_URL") or None)
+    required_channel: str | None = field(default_factory=lambda: os.getenv("REQUIRED_CHANNEL") or None)
 
     # Backup retention policy (spec section 21)
     daily_backup_retention_days: int = 30

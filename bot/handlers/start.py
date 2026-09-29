@@ -7,6 +7,7 @@ from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMar
 
 from bot.config import settings
 from bot.keyboards.inline import NavCB, main_reply_keyboard
+from bot.middlewares.subscription import CHECK_SUB_CALLBACK, is_subscribed
 
 router = Router(name="start")
 
@@ -76,6 +77,22 @@ async def cmd_start(message: Message, state: FSMContext) -> None:
 @router.message(Command("help"))
 async def cmd_help(message: Message) -> None:
     await message.answer(HELP_TEXT)
+
+
+@router.callback_query(F.data == CHECK_SUB_CALLBACK)
+async def check_subscription(callback: CallbackQuery, state: FSMContext) -> None:
+    if await is_subscribed(callback.bot, callback.from_user.id):
+        await callback.answer("✅ Obuna tasdiqlandi!")
+        await callback.message.edit_text("✅ Obuna tasdiqlandi! Xush kelibsiz.")
+        await state.clear()
+        await callback.message.answer(WELCOME_TEXT, reply_markup=main_reply_keyboard())
+        kb = _webapp_keyboard()
+        if kb:
+            await callback.message.answer(
+                "✨ Yangi: to'liq grafik va tezkor boshqaruv uchun Mini App'ni sinab ko'ring:", reply_markup=kb
+            )
+    else:
+        await callback.answer("❌ Hali obuna bo'lmagansiz. Kanalga qo'shilib, qayta tekshiring.", show_alert=True)
 
 
 @router.callback_query(NavCB.filter(F.target == "cancel"))
