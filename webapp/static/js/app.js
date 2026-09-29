@@ -7,13 +7,13 @@
    change a palette color here AND in style.css, never inline.
    ============================================================ */
 const THEME = {
-  bg: "#0a0a0a",
+  bg: "#06070c",
   border: "#292929",
   textDim: "#949494",
   green: "#34d399",
   red: "#f87171",
   gray: "#6b6b6b",
-  accent: "#c8f751",
+  accent: "#a967ff",
 };
 
 /* ============================================================
