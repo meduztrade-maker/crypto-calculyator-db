@@ -8,9 +8,12 @@ from aiogram import Bot
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from bot.config import settings as bot_settings
 from bot.database.crud import add_margin_preset, delete_margin_preset, list_margin_presets, update_margin
 from bot.database.models import User
+from bot.middlewares.subscription import is_subscribed
 from bot.services.backup import _restore_database_from_file, get_last_backup, restore_latest, run_backup
+from webapp.auth import TelegramUser, get_telegram_user
 from webapp.deps import get_current_user, get_session
 from webapp.schemas import BackupOut, MarginIn, MarginPresetIn, MarginPresetOut, MeOut
 
@@ -19,6 +22,18 @@ router = APIRouter(prefix="/api", tags=["settings"])
 
 def get_bot(request: Request) -> Bot:
     return request.app.state.bot
+
+
+@router.get("/subscription-status")
+async def subscription_status(tg_user: TelegramUser = Depends(get_telegram_user), bot: Bot = Depends(get_bot)):
+    """Checked once when the Mini App loads, before any real data call -
+    deliberately does NOT depend on get_current_user, so a gated user gets
+    a clean 'please subscribe' screen instead of a confusing generic error
+    on whatever the first real API call happens to be."""
+    return {
+        "subscribed": await is_subscribed(bot, tg_user.id),
+        "channel": bot_settings.required_channel,
+    }
 
 
 def _require_admin(user: User) -> None:

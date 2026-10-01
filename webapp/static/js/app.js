@@ -1512,6 +1512,37 @@ document.getElementById("restoreFileInput").addEventListener("change", async () 
 });
 
 /* ============================================================
+   Subscription gate — mirrors the bot-chat gate so the Mini App's
+   persistent menu button can't be used to skip it.
+   ============================================================ */
+function renderSubscriptionGate(channel) {
+  const handle = channel.replace(/^@/, "");
+  document.getElementById("app").innerHTML = `
+    <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;padding:28px;text-align:center;gap:16px">
+      <div style="font-size:48px">🔒</div>
+      <div style="font-size:17px;font-weight:700;max-width:280px">Botdan foydalanish uchun avval kanalga obuna bo'ling</div>
+      <a href="https://t.me/${handle}" target="_blank" rel="noopener" class="primary-btn" style="text-decoration:none;max-width:280px;display:flex;align-items:center;justify-content:center;margin-bottom:0">📢 ${channel}ga obuna bo'lish</a>
+      <button class="btn-small" id="recheckSubBtn" style="max-width:280px">✅ Tekshirish</button>
+    </div>
+  `;
+  document.getElementById("recheckSubBtn").addEventListener("click", () => location.reload());
+}
+
+async function passesSubscriptionGate() {
+  try {
+    const status = await api("/api/subscription-status");
+    if (status.subscribed || !status.channel) return true;
+    renderSubscriptionGate(status.channel);
+    return false;
+  } catch (e) {
+    // Don't let a broken check lock the user out of a working app.
+    return true;
+  }
+}
+
+/* ============================================================
    Init
    ============================================================ */
-loadDashboard();
+(async () => {
+  if (await passesSubscriptionGate()) loadDashboard();
+})();
