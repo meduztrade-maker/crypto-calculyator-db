@@ -37,9 +37,9 @@ router = Router(name="menu")
 
 @router.message(F.text == MENU_ADD_TRADE)
 @safe_handler
-async def menu_add_trade(message: Message, state: FSMContext) -> None:
+async def menu_add_trade(message: Message, state: FSMContext, session: AsyncSession, user: User) -> None:
     await state.clear()
-    await render_add_trade(message, state)
+    await render_add_trade(message, state, session, user)
 
 
 @router.message(F.text == MENU_PENDING)

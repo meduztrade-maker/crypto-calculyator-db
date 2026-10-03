@@ -7,6 +7,8 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+
 from bot.database.crud import create_pending_trade
 from bot.database.models import Direction, User
 from bot.keyboards.inline import (
@@ -18,13 +20,27 @@ from bot.keyboards.inline import (
     direction_keyboard,
     risk_keyboard,
 )
+from bot.services.stats import check_daily_risk_limit
+from bot.services.tags import SETUP_TAGS
 from bot.states.trade_states import TradeCreate
 from bot.utils.formatting import InputError, parse_decimal, safe_handler, trade_card_pending
+
+SETUP_TAG_PREFIX = "setuptag:"
+SETUP_TAG_SKIP = "setuptag:skip"
+
+
+def _setup_tag_keyboard() -> InlineKeyboardMarkup:
+    rows = [[InlineKeyboardButton(text=tag, callback_data=f"{SETUP_TAG_PREFIX}{tag}")] for tag in SETUP_TAGS]
+    rows.append([InlineKeyboardButton(text="⏭ O'tkazib yuborish", callback_data=SETUP_TAG_SKIP)])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 router = Router(name="trade_create")
 
 
-async def render_add_trade(message: Message, state: FSMContext) -> None:
+async def render_add_trade(message: Message, state: FSMContext, session: AsyncSession, user: User) -> None:
+    warning = await check_daily_risk_limit(session, user)
+    if warning:
+        await message.answer(warning)
     await state.set_state(TradeCreate.coin)
     await message.answer("🪙 Coin nomini kiriting:", reply_markup=cancel_button())
 
@@ -87,8 +103,18 @@ async def got_entry(message: Message, state: FSMContext) -> None:
 async def got_stop_loss(message: Message, state: FSMContext) -> None:
     value = parse_decimal(message.text)
     await state.update_data(stop_loss_price=str(value))
+    await state.set_state(TradeCreate.setup_tag)
+    await message.answer("🏷 Setup turi (ixtiyoriy):", reply_markup=_setup_tag_keyboard())
+
+
+@router.callback_query(TradeCreate.setup_tag, F.data.startswith(SETUP_TAG_PREFIX))
+@safe_handler
+async def got_setup_tag(callback: CallbackQuery, state: FSMContext) -> None:
+    tag = callback.data[len(SETUP_TAG_PREFIX):]
+    await state.update_data(setup_tag=None if tag == "skip" else tag)
     await state.set_state(TradeCreate.screenshot)
-    await message.answer("📸 Trade screenshotini yuboring.", reply_markup=cancel_button())
+    await callback.message.edit_text("📸 Trade screenshotini yuboring.")
+    await callback.answer()
 
 
 @router.message(TradeCreate.screenshot, F.photo)
@@ -106,6 +132,7 @@ async def got_screenshot(message: Message, state: FSMContext, session: AsyncSess
         entry_price=Decimal(data["entry_price"]),
         stop_loss_price=Decimal(data["stop_loss_price"]),
         opening_screenshot_file_id=file_id,
+        setup_tag=data.get("setup_tag"),
     )
     await state.clear()
     await message.answer(trade_card_pending(trade), reply_markup=back_button("pending", "🔙 Pending ro'yxatiga"))

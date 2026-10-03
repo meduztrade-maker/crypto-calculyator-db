@@ -82,6 +82,25 @@ function bindAllDecimalInputs(root) {
   root.querySelectorAll('input[data-decimal]').forEach(bindDecimalInput);
 }
 
+function tagPillsHtml(tagList, dataAttr) {
+  return tagList.map((t) => `<button class="pill" data-${dataAttr}="${t}">${t}</button>`).join("");
+}
+
+/* Toggleable pill group: click to select, click again to deselect -
+   used for setup/emotion tags, which are optional (unlike direction/RR,
+   which always need exactly one answer). */
+function bindToggleTagPills(container, selector, onChange) {
+  container.querySelectorAll(selector).forEach((p) => {
+    p.addEventListener("click", () => {
+      const already = p.classList.contains("selected");
+      container.querySelectorAll(selector).forEach((x) => x.classList.remove("selected"));
+      if (already) { onChange(null); return; }
+      p.classList.add("selected");
+      onChange(p.dataset.setup || p.dataset.emotion || null);
+    });
+  });
+}
+
 function fmtDec(v) {
   const num = n(v);
   if (Number.isInteger(num)) return String(num);
@@ -368,7 +387,10 @@ async function handleTradeAction(t, act) {
   }
 }
 
-function openCloseSheet(t, kind) {
+async function openCloseSheet(t, kind) {
+  let emotionTags = [];
+  try { emotionTags = (await api("/api/tags")).emotion_tags || []; } catch (e) { /* non-fatal */ }
+
   const presets = kind === "BU"
     ? ["0", "0.5", "0.75", "1", "1.5", "2", "2.5", "3", "4", "5"]
     : ["1", "1.5", "2", "2.5", "3", "4", "5", "6", "8", "10"];
@@ -385,6 +407,11 @@ function openCloseSheet(t, kind) {
         </div>
         <input type="text" inputmode="decimal" data-decimal class="field-input" id="rrCustom" placeholder="Yoki qo'lda kiriting" style="margin-top:10px">
       </div>` : `<div class="hint-text">Natija: -1R</div>`}
+    ${emotionTags.length ? `
+    <div class="field">
+      <label class="field-label">🧠 His-tuyg'u (ixtiyoriy)</label>
+      <div class="pill-row" id="emotionPills">${tagPillsHtml(emotionTags, "emotion")}</div>
+    </div>` : ""}
     <div class="field">
       <label class="field-label">📸 Screenshot (ixtiyoriy)</label>
       <div class="upload-box" id="uploadBox">Rasm tanlash uchun bosing</div>
@@ -395,6 +422,8 @@ function openCloseSheet(t, kind) {
 
   let selectedRR = needsRR ? null : "-1";
   let fileId = null;
+  let emotionTag = null;
+  bindToggleTagPills(sheetContent, "#emotionPills .pill", (v) => { emotionTag = v; });
 
   if (needsRR) {
     sheetContent.querySelectorAll("#rrPills .pill").forEach((p) => {
@@ -420,7 +449,7 @@ function openCloseSheet(t, kind) {
     try {
       await api(`/api/trades/${t.id}/close`, {
         method: "POST",
-        body: { result_type: kind, rr: needsRR ? selectedRR : "-1", screenshot_file_id: fileId },
+        body: { result_type: kind, rr: needsRR ? selectedRR : "-1", screenshot_file_id: fileId, emotion_tag: emotionTag },
       });
       toast(`✅ ${label} bilan yopildi`, "success");
       closeSheet(); loadTrades(); loadDashboard();
@@ -543,7 +572,14 @@ async function openLeverageSheet() {
   });
 }
 
-function openAddTradeSheet() {
+async function openAddTradeSheet() {
+  let setupTags = [];
+  try { setupTags = (await api("/api/tags")).setup_tags || []; } catch (e) { /* non-fatal */ }
+  try {
+    const rw = await api("/api/trades/risk-warning");
+    if (rw.warning) toast(rw.warning, "error");
+  } catch (e) { /* non-fatal */ }
+
   const riskPresets = ["0.5", "1", "1.5", "2", "2.5", "3"];
   openSheet(`
     <div class="sheet-title">➕ Trade qo'shish</div>
@@ -573,6 +609,11 @@ function openAddTradeSheet() {
       <label class="field-label">Stop Loss narxi</label>
       <input type="text" inputmode="decimal" data-decimal class="field-input" id="tSL" placeholder="103500">
     </div>
+    ${setupTags.length ? `
+    <div class="field">
+      <label class="field-label">🏷 Setup (ixtiyoriy)</label>
+      <div class="pill-row" id="setupPills">${tagPillsHtml(setupTags, "setup")}</div>
+    </div>` : ""}
     <div class="field">
       <label class="field-label">📸 Screenshot (ixtiyoriy)</label>
       <div class="upload-box" id="uploadBox">Rasm tanlash uchun bosing</div>
@@ -581,7 +622,8 @@ function openAddTradeSheet() {
     <button class="primary-btn" id="createTradeBtn">Pending sifatida yaratish</button>
   `);
 
-  let direction = null, risk = null, fileId = null;
+  let direction = null, risk = null, fileId = null, setupTag = null;
+  bindToggleTagPills(sheetContent, "#setupPills .pill", (v) => { setupTag = v; });
 
   sheetContent.querySelectorAll("[data-dir]").forEach((p) => {
     p.addEventListener("click", () => {
@@ -617,7 +659,7 @@ function openAddTradeSheet() {
     try {
       await api("/api/trades", {
         method: "POST",
-        body: { coin, direction, risk_percent: risk, entry_price: entry, stop_loss_price: sl, screenshot_file_id: fileId },
+        body: { coin, direction, risk_percent: risk, entry_price: entry, stop_loss_price: sl, screenshot_file_id: fileId, setup_tag: setupTag },
       });
       toast("✅ Pending trade yaratildi", "success");
       closeSheet();
@@ -1377,11 +1419,26 @@ async function loadSettings() {
     state.me = me;
     document.getElementById("adminPanel").classList.toggle("hidden", !me.is_admin);
     document.getElementById("userChip").textContent = me.username ? "@" + me.username : "";
+    document.getElementById("riskLimitValue").textContent = me.daily_risk_limit ? `-${fmtDec(me.daily_risk_limit)}R` : "o'rnatilmagan";
     await loadMarginPresets();
   } catch (e) {
     toast(e.message, "error");
   }
 }
+
+document.getElementById("saveRiskLimitBtn").addEventListener("click", async () => {
+  const val = document.getElementById("riskLimitInput").value;
+  if (val === "" || isNaN(parseFloat(val))) { toast("Qiymat kiriting", "error"); return; }
+  try {
+    const me = await api("/api/settings/daily-risk-limit", { method: "POST", body: { limit: val } });
+    state.me = me;
+    document.getElementById("riskLimitValue").textContent = me.daily_risk_limit ? `-${fmtDec(me.daily_risk_limit)}R` : "o'rnatilmagan";
+    document.getElementById("riskLimitInput").value = "";
+    toast(me.daily_risk_limit ? "✅ Saqlandi" : "✅ O'chirildi", "success");
+  } catch (e) {
+    toast(e.message, "error");
+  }
+});
 
 const PRESET_ICON_CLASSES = ["icon-blue", "icon-purple", "icon-teal", "icon-amber", "icon-green"];
 

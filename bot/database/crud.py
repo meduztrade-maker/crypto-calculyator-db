@@ -47,6 +47,13 @@ async def update_margin(session: AsyncSession, user: User, margin: Decimal) -> U
     return user
 
 
+async def update_daily_risk_limit(session: AsyncSession, user: User, limit: Decimal | None) -> User:
+    user.daily_risk_limit = limit
+    await session.commit()
+    await session.refresh(user)
+    return user
+
+
 # ---------------------------------------------------------------------------
 # Margin presets — multi-account leverage calculator
 # ---------------------------------------------------------------------------
@@ -98,6 +105,7 @@ async def create_pending_trade(
     entry_price: Decimal,
     stop_loss_price: Decimal,
     opening_screenshot_file_id: str | None = None,
+    setup_tag: str | None = None,
 ) -> Trade:
     trade = Trade(
         user_id=user.id,
@@ -109,6 +117,7 @@ async def create_pending_trade(
         stop_loss_price=stop_loss_price,
         stop_distance_percent=compute_stop_distance_percent(entry_price, stop_loss_price),
         opening_screenshot_file_id=opening_screenshot_file_id,
+        setup_tag=setup_tag,
     )
     session.add(trade)
     await session.commit()
@@ -195,6 +204,16 @@ async def list_recent_trades(session: AsyncSession, user: User, limit: int = 5) 
     return list(result.scalars().all())
 
 
+async def list_all_closed_trades(session: AsyncSession, user: User) -> list[Trade]:
+    """Every closed trade, oldest first — for CSV export."""
+    result = await session.execute(
+        select(Trade)
+        .where(Trade.user_id == user.id, Trade.status == TradeStatus.CLOSED)
+        .order_by(Trade.closed_at.asc())
+    )
+    return list(result.scalars().all())
+
+
 async def force_delete_trade(session: AsyncSession, user: User, trade_id: int) -> None:
     """Deletes a trade regardless of its status (used from the recent-trades cleanup screen)."""
     trade = await get_user_trade(session, user, trade_id, lock=True)
@@ -204,7 +223,13 @@ async def force_delete_trade(session: AsyncSession, user: User, trade_id: int) -
     await session.commit()
 
 
-async def close_trade_sl(session: AsyncSession, user: User, trade_id: int, closing_screenshot_file_id: str | None = None) -> Trade:
+async def close_trade_sl(
+    session: AsyncSession,
+    user: User,
+    trade_id: int,
+    closing_screenshot_file_id: str | None = None,
+    emotion_tag: str | None = None,
+) -> Trade:
     trade = await get_user_trade(session, user, trade_id, lock=True)
     if trade is None or trade.status != TradeStatus.ACTIVE:
         raise TradeStateError("Trade is not active")
@@ -212,6 +237,7 @@ async def close_trade_sl(session: AsyncSession, user: User, trade_id: int, closi
     trade.result_type = ResultType.SL
     trade.result_rr = Decimal("-1")
     trade.closing_screenshot_file_id = closing_screenshot_file_id
+    trade.emotion_tag = emotion_tag
     trade.closed_at = _now()
     await session.commit()
     await session.refresh(trade)
@@ -225,6 +251,7 @@ async def close_trade_with_rr(
     result_type: ResultType,
     rr: Decimal,
     closing_screenshot_file_id: str | None = None,
+    emotion_tag: str | None = None,
 ) -> Trade:
     if result_type not in (ResultType.BU, ResultType.TP):
         raise ValueError("result_type must be BU or TP for this transition")
@@ -235,6 +262,7 @@ async def close_trade_with_rr(
     trade.result_type = result_type
     trade.result_rr = rr
     trade.closing_screenshot_file_id = closing_screenshot_file_id
+    trade.emotion_tag = emotion_tag
     trade.closed_at = _now()
     await session.commit()
     await session.refresh(trade)

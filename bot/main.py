@@ -14,6 +14,7 @@ from bot.config import settings
 from bot.handlers import (
     active,
     alerts,
+    export,
     leverage,
     menu,
     pending,
@@ -53,6 +54,7 @@ def build_dispatcher() -> Dispatcher:
     dp.include_router(recent_trades.router)
     dp.include_router(alerts.router)
     dp.include_router(settings_handlers.router)
+    dp.include_router(export.router)
 
     return dp
 

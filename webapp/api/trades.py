@@ -22,11 +22,18 @@ from bot.database.crud import (
     miss_trade,
 )
 from bot.database.models import Direction, ResultType, Trade, TradeStatus, User
-from bot.services.stats import TZ
+from bot.services.stats import TZ, check_daily_risk_limit
 from webapp.deps import get_current_user, get_session
-from webapp.schemas import TradeCloseIn, TradeCreateIn, TradeOut
+from webapp.schemas import RiskWarningOut, TradeCloseIn, TradeCreateIn, TradeOut
 
 router = APIRouter(prefix="/api/trades", tags=["trades"])
+
+
+@router.get("/risk-warning", response_model=RiskWarningOut)
+async def risk_warning(user: User = Depends(get_current_user), session: AsyncSession = Depends(get_session)):
+    """The Mini App calls this right before opening the Add Trade sheet,
+    same check/same wording as the bot-chat warning."""
+    return RiskWarningOut(warning=await check_daily_risk_limit(session, user))
 
 
 @router.get("/pending", response_model=list[TradeOut])
@@ -57,7 +64,7 @@ async def create_trade(
         raise HTTPException(status_code=422, detail="Qiymatlar musbat bo'lishi kerak")
     trade = await create_pending_trade(
         session, user, body.coin, Direction(body.direction), body.risk_percent,
-        body.entry_price, body.stop_loss_price, body.screenshot_file_id,
+        body.entry_price, body.stop_loss_price, body.screenshot_file_id, body.setup_tag,
     )
     return TradeOut.model_validate(trade)
 
@@ -100,12 +107,13 @@ async def close(
 ):
     try:
         if body.result_type == "SL":
-            trade = await close_trade_sl(session, user, trade_id, body.screenshot_file_id)
+            trade = await close_trade_sl(session, user, trade_id, body.screenshot_file_id, body.emotion_tag)
         else:
             if body.rr is None:
                 raise HTTPException(status_code=422, detail="RR qiymati kerak")
             trade = await close_trade_with_rr(
-                session, user, trade_id, ResultType(body.result_type), body.rr, body.screenshot_file_id
+                session, user, trade_id, ResultType(body.result_type), body.rr,
+                body.screenshot_file_id, body.emotion_tag,
             )
     except TradeStateError as e:
         raise HTTPException(status_code=409, detail=str(e))

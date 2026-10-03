@@ -5,7 +5,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from bot.database.crud import update_margin
+from bot.database.crud import update_daily_risk_limit, update_margin
 from bot.database.models import User
 from bot.keyboards.inline import BackupCB, NavCB, cancel_button, restore_confirm_keyboard, settings_menu
 from bot.services.backup import get_last_backup, restore_latest, run_backup
@@ -16,7 +16,8 @@ router = Router(name="settings")
 
 
 async def render_settings(message: Message, user: User) -> None:
-    text = f"⚙️ SOZLAMALAR\n\n💵 Joriy margin: ${dec_str(user.margin)}"
+    limit_line = f"-{dec_str(user.daily_risk_limit)}R" if user.daily_risk_limit else "o'rnatilmagan"
+    text = f"⚙️ SOZLAMALAR\n\n💵 Joriy margin: ${dec_str(user.margin)}\n📉 Kunlik risk limit: {limit_line}"
     await message.answer(text, reply_markup=settings_menu())
 
 
@@ -35,6 +36,31 @@ async def margin_entered(message: Message, state: FSMContext, session: AsyncSess
     await update_margin(session, user, value)
     await state.clear()
     await message.answer(f"✅ Margin saqlandi: ${dec_str(value)}")
+
+
+@router.callback_query(NavCB.filter(F.target == "change_risk_limit"))
+@safe_handler
+async def change_risk_limit_prompt(callback: CallbackQuery, state: FSMContext) -> None:
+    await state.set_state(SettingsFlow.daily_risk_limit)
+    await callback.message.edit_text(
+        "📉 Kunlik risk limitni kiriting (R, masalan 3 — bu \"-3R\" degani).\n\n"
+        "O'chirish uchun 0 yozing.",
+        reply_markup=cancel_button(),
+    )
+    await callback.answer()
+
+
+@router.message(SettingsFlow.daily_risk_limit)
+@safe_handler
+async def daily_risk_limit_entered(message: Message, state: FSMContext, session: AsyncSession, user: User) -> None:
+    value = parse_decimal(message.text, allow_negative=True)
+    limit = abs(value) if value != 0 else None
+    await update_daily_risk_limit(session, user, limit)
+    await state.clear()
+    if limit:
+        await message.answer(f"✅ Kunlik risk limit saqlandi: -{dec_str(limit)}R")
+    else:
+        await message.answer("✅ Kunlik risk limit o'chirildi.")
 
 
 def _is_admin(user: User) -> bool:

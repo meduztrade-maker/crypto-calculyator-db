@@ -9,13 +9,20 @@ from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from bot.config import settings as bot_settings
-from bot.database.crud import add_margin_preset, delete_margin_preset, list_margin_presets, update_margin
+from bot.database.crud import (
+    add_margin_preset,
+    delete_margin_preset,
+    list_margin_presets,
+    update_daily_risk_limit,
+    update_margin,
+)
 from bot.database.models import User
 from bot.middlewares.subscription import is_subscribed
 from bot.services.backup import _restore_database_from_file, get_last_backup, restore_latest, run_backup
+from bot.services.tags import EMOTION_TAGS, SETUP_TAGS
 from webapp.auth import TelegramUser, get_telegram_user
 from webapp.deps import get_current_user, get_session
-from webapp.schemas import BackupOut, MarginIn, MarginPresetIn, MarginPresetOut, MeOut
+from webapp.schemas import BackupOut, DailyRiskLimitIn, MarginIn, MarginPresetIn, MarginPresetOut, MeOut, TagsOut
 
 router = APIRouter(prefix="/api", tags=["settings"])
 
@@ -43,7 +50,27 @@ def _require_admin(user: User) -> None:
 
 @router.get("/me", response_model=MeOut)
 async def me(user: User = Depends(get_current_user)):
-    return MeOut(telegram_id=user.telegram_id, username=user.username, margin=user.margin, timezone=user.timezone, is_admin=user.is_admin)
+    return MeOut(
+        telegram_id=user.telegram_id, username=user.username, margin=user.margin,
+        timezone=user.timezone, is_admin=user.is_admin, daily_risk_limit=user.daily_risk_limit,
+    )
+
+
+@router.get("/tags", response_model=TagsOut)
+async def tags():
+    return TagsOut(setup_tags=SETUP_TAGS, emotion_tags=EMOTION_TAGS)
+
+
+@router.post("/settings/daily-risk-limit", response_model=MeOut)
+async def set_daily_risk_limit(
+    body: DailyRiskLimitIn, user: User = Depends(get_current_user), session: AsyncSession = Depends(get_session)
+):
+    limit = abs(body.limit) if body.limit else None
+    user = await update_daily_risk_limit(session, user, limit)
+    return MeOut(
+        telegram_id=user.telegram_id, username=user.username, margin=user.margin,
+        timezone=user.timezone, is_admin=user.is_admin, daily_risk_limit=user.daily_risk_limit,
+    )
 
 
 @router.post("/settings/margin", response_model=MeOut)

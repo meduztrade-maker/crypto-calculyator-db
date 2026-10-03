@@ -62,6 +62,9 @@ class User(Base):
     username: Mapped[str | None] = mapped_column(String(64), nullable=True)
     margin: Mapped[Decimal] = mapped_column(Numeric(20, 2), default=Decimal("500"))
     timezone: Mapped[str] = mapped_column(String(64), default="Asia/Tashkent")
+    # Personal discipline rule: e.g. 3 means "warn me once I'm down 3R today".
+    # Nullable = no rule set, which is also how the feature stays fully opt-in.
+    daily_risk_limit: Mapped[Decimal | None] = mapped_column(Numeric(10, 4), nullable=True)
     is_admin: Mapped[bool] = mapped_column(default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
@@ -87,6 +90,12 @@ class Trade(Base):
 
     result_type: Mapped[ResultType | None] = mapped_column(Enum(ResultType, name="result_type_enum"), nullable=True)
     result_rr: Mapped[Decimal | None] = mapped_column(Numeric(10, 4), nullable=True)
+
+    # Both optional/skippable - the whole point is spotting patterns later
+    # ("which setup actually makes money", "do I lose more on FOMO entries"),
+    # not adding friction to logging a trade.
+    setup_tag: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    emotion_tag: Mapped[str | None] = mapped_column(String(32), nullable=True)
 
     opening_screenshot_file_id: Mapped[str | None] = mapped_column(String(256), nullable=True)
     closing_screenshot_file_id: Mapped[str | None] = mapped_column(String(256), nullable=True)

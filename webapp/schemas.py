@@ -20,6 +20,8 @@ class TradeOut(BaseModel):
     stop_distance_percent: Decimal
     result_type: Optional[str] = None
     result_rr: Optional[Decimal] = None
+    setup_tag: Optional[str] = None
+    emotion_tag: Optional[str] = None
     opening_screenshot_file_id: Optional[str] = None
     closing_screenshot_file_id: Optional[str] = None
     created_at: datetime
@@ -40,12 +42,14 @@ class TradeCreateIn(BaseModel):
     entry_price: Decimal
     stop_loss_price: Decimal
     screenshot_file_id: Optional[str] = None
+    setup_tag: Optional[str] = None
 
 
 class TradeCloseIn(BaseModel):
     result_type: Literal["SL", "BU", "TP"]
     rr: Optional[Decimal] = None
     screenshot_file_id: Optional[str] = None
+    emotion_tag: Optional[str] = None
 
 
 class LeverageAccountIn(BaseModel):
@@ -139,10 +143,24 @@ class MeOut(BaseModel):
     margin: Decimal
     timezone: str
     is_admin: bool
+    daily_risk_limit: Optional[Decimal] = None
 
 
 class MarginIn(BaseModel):
     margin: Decimal
+
+
+class DailyRiskLimitIn(BaseModel):
+    limit: Optional[Decimal] = None
+
+
+class TagsOut(BaseModel):
+    setup_tags: list[str]
+    emotion_tags: list[str]
+
+
+class RiskWarningOut(BaseModel):
+    warning: Optional[str] = None
 
 
 class BackupOut(BaseModel):

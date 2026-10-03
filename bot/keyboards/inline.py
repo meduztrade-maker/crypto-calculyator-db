@@ -216,6 +216,7 @@ def reports_menu() -> InlineKeyboardMarkup:
 def settings_menu() -> InlineKeyboardMarkup:
     b = InlineKeyboardBuilder()
     b.button(text="💵 Change Margin", callback_data=NavCB(target="change_margin"))
+    b.button(text="📉 Kunlik risk limit", callback_data=NavCB(target="change_risk_limit"))
     b.button(text="☁️ Backup Now", callback_data=BackupCB(action="now"))
     b.button(text="🔄 Restore", callback_data=BackupCB(action="restore"))
     b.button(text="🕐 Last Backup", callback_data=BackupCB(action="last"))

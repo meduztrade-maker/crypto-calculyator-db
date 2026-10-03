@@ -8,11 +8,13 @@ class TradeCreate(StatesGroup):
     risk_custom = State()
     entry = State()
     stop_loss = State()
+    setup_tag = State()
     screenshot = State()
 
 
 class TradeClose(StatesGroup):
     rr_custom = State()
+    emotion_tag = State()
     screenshot = State()
 
 
@@ -23,6 +25,7 @@ class LeverageCalc(StatesGroup):
 
 class SettingsFlow(StatesGroup):
     margin = State()
+    daily_risk_limit = State()
 
 
 class CustomPeriod(StatesGroup):

@@ -36,6 +36,21 @@ def custom_bounds(start_date: datetime, end_date: datetime) -> tuple[datetime, d
     return start_local.astimezone(pytz.utc), end_local.astimezone(pytz.utc)
 
 
+async def check_daily_risk_limit(session: AsyncSession, user: User) -> str | None:
+    """Returns a warning string if the user has set a daily risk limit and
+    today's realized R has already reached/passed it, else None. A warning,
+    not a hard block - the bot flags it, the trader still decides."""
+    if not user.daily_risk_limit or user.daily_risk_limit <= 0:
+        return None
+    stats = await compute_period_stats(session, user, *today_bounds())
+    if stats.total_r <= -abs(user.daily_risk_limit):
+        return (
+            f"⚠️ Diqqat: bugungi natijangiz {dec_str(stats.total_r)}R — "
+            f"belgilagan kunlik limit (-{dec_str(abs(user.daily_risk_limit))}R) ga yetdi yoki oshdi."
+        )
+    return None
+
+
 @dataclass
 class CoinResult:
     coin: str
