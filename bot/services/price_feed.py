@@ -57,6 +57,7 @@ async def _price_binance_futures(http: aiohttp.ClientSession, symbol: str) -> Op
     status, body = await _get_json(http, _FUTURES_TICKER_URL, {"symbol": symbol})
     if status == 200 and isinstance(body, dict) and "price" in body:
         return _to_decimal(body["price"])
+    logger.info("binance_futures miss for %s: status=%s body=%s", symbol, status, str(body)[:200])
     return None
 
 
@@ -64,6 +65,7 @@ async def _price_binance_spot(http: aiohttp.ClientSession, symbol: str) -> Optio
     status, body = await _get_json(http, _SPOT_TICKER_URL, {"symbol": symbol})
     if status == 200 and isinstance(body, dict) and "price" in body:
         return _to_decimal(body["price"])
+    logger.info("binance_spot miss for %s: status=%s body=%s", symbol, status, str(body)[:200])
     return None
 
 
@@ -73,6 +75,7 @@ async def _price_bybit(http: aiohttp.ClientSession, symbol: str) -> Optional[Dec
         items = ((body.get("result") or {}).get("list")) or []
         if items and items[0].get("lastPrice"):
             return _to_decimal(items[0]["lastPrice"])
+    logger.info("bybit miss for %s: status=%s body=%s", symbol, status, str(body)[:200])
     return None
 
 
@@ -87,6 +90,7 @@ async def _price_mexc(http: aiohttp.ClientSession, symbol: str) -> Optional[Deci
             price = data.get("lastPrice") or data.get("fairPrice")
             if price is not None:
                 return _to_decimal(price)
+    logger.info("mexc miss for %s: status=%s body=%s", symbol, status, str(body)[:200])
     return None
 
 
