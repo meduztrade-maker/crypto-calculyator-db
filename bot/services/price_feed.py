@@ -17,6 +17,15 @@ _KLINES_URL = "https://data-api.binance.vision/api/v3/klines"
 
 _QUOTE_SUFFIXES = ("USDT", "USDC", "BUSD", "FDUSD")
 
+# aiohttp's default User-Agent ("Python/3.x aiohttp/x.x") gets flagged as
+# bot traffic by some exchanges' WAF (observed: Bybit returning a bare 403
+# with no body) - a realistic browser UA avoids that false positive.
+_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                  "(KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
+    "Accept": "application/json",
+}
+
 
 class PriceLookupError(Exception):
     pass
@@ -111,7 +120,7 @@ async def get_price(symbol: str) -> Decimal:
     Used to validate a coin when creating an alert."""
     symbol = symbol.strip().upper()
     errors: list[str] = []
-    async with aiohttp.ClientSession(timeout=_TIMEOUT) as http:
+    async with aiohttp.ClientSession(timeout=_TIMEOUT, headers=_HEADERS) as http:
         for provider in _PROVIDERS:
             try:
                 price = await provider(http, symbol)
@@ -142,7 +151,7 @@ async def get_all_prices() -> dict[str, Decimal]:
     HTTP call, not one each. Symbols this doesn't cover (futures-only
     listings) are filled in individually by the caller via get_price_safe.
     """
-    async with aiohttp.ClientSession(timeout=_TIMEOUT) as http:
+    async with aiohttp.ClientSession(timeout=_TIMEOUT, headers=_HEADERS) as http:
         async with http.get(_SPOT_TICKER_URL) as resp:
             if resp.status != 200:
                 logger.warning("Binance ticker fetch failed with status %s", resp.status)
@@ -164,7 +173,7 @@ async def get_klines(symbol: str, interval: str = "15m", limit: int = 96) -> lis
     [{t, o, h, l, c}, ...], oldest first.
     """
     symbol = symbol.strip().upper()
-    async with aiohttp.ClientSession(timeout=_TIMEOUT) as http:
+    async with aiohttp.ClientSession(timeout=_TIMEOUT, headers=_HEADERS) as http:
         async with http.get(_KLINES_URL, params={"symbol": symbol, "interval": interval, "limit": str(limit)}) as resp:
             if resp.status != 200:
                 raise PriceLookupError(f"{symbol} uchun narx tarixi topilmadi")
