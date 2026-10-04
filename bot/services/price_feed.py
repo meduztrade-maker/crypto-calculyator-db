@@ -44,8 +44,12 @@ async def _get_json(http: aiohttp.ClientSession, url: str, params: Optional[dict
     try:
         async with http.get(url, params=params) as resp:
             try:
-                body = await resp.json()
-            except Exception:  # noqa: BLE001 - not JSON, or empty body
+                # content_type=None: some exchanges send perfectly valid
+                # JSON with a Content-Type header aiohttp doesn't consider
+                # "proper" (e.g. text/plain) - without this, resp.json()
+                # raises and a real price silently turns into "not found".
+                body = await resp.json(content_type=None)
+            except Exception:  # noqa: BLE001 - genuinely not JSON, or empty body
                 body = None
             return resp.status, body
     except aiohttp.ClientError as exc:
