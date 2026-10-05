@@ -13,6 +13,8 @@ _SPOT_TICKER_URL = "https://data-api.binance.vision/api/v3/ticker/price"
 _FUTURES_TICKER_URL = "https://fapi.binance.com/fapi/v1/ticker/price"
 _BYBIT_TICKER_URL = "https://api.bybit.com/v5/market/tickers"
 _MEXC_TICKER_URL = "https://contract.mexc.com/api/v1/contract/ticker"
+_COINGECKO_SEARCH_URL = "https://api.coingecko.com/api/v3/search"
+_COINGECKO_PRICE_URL = "https://api.coingecko.com/api/v3/simple/price"
 _KLINES_URL = "https://data-api.binance.vision/api/v3/klines"
 
 _QUOTE_SUFFIXES = ("USDT", "USDC", "BUSD", "FDUSD")
@@ -92,6 +94,32 @@ async def _price_bybit(http: aiohttp.ClientSession, symbol: str) -> Optional[Dec
     return None
 
 
+async def _price_coingecko(http: aiohttp.ClientSession, symbol: str) -> Optional[Decimal]:
+    """CoinGecko is a broad, open price AGGREGATOR, not an exchange - it
+    doesn't have the trading-venue WAF/geo-block issues Binance/Bybit do,
+    and it covers thousands of coins the direct exchanges don't list at
+    all. Last resort since it costs two sequential calls (symbol search,
+    then price by id) and ticker symbols can be ambiguous across coins."""
+    base, quote = _split_quote(symbol)
+    if quote.upper() not in ("USDT", "USDC", "BUSD", "FDUSD"):
+        return None
+    status, body = await _get_json(http, _COINGECKO_SEARCH_URL, {"query": base})
+    if status != 200 or not isinstance(body, dict):
+        logger.info("coingecko search miss for %s: status=%s", symbol, status)
+        return None
+    match = next((c for c in (body.get("coins") or []) if c.get("symbol", "").upper() == base.upper()), None)
+    if not match or not match.get("id"):
+        logger.info("coingecko search: no match for %s among %d results", symbol, len(body.get("coins") or []))
+        return None
+
+    coin_id = match["id"]
+    status, body = await _get_json(http, _COINGECKO_PRICE_URL, {"ids": coin_id, "vs_currencies": "usd"})
+    if status == 200 and isinstance(body, dict) and isinstance(body.get(coin_id), dict) and "usd" in body[coin_id]:
+        return _to_decimal(body[coin_id]["usd"])
+    logger.info("coingecko price miss for %s (id=%s): status=%s", symbol, coin_id, status)
+    return None
+
+
 async def _price_mexc(http: aiohttp.ClientSession, symbol: str) -> Optional[Decimal]:
     base, quote = _split_quote(symbol)
     status, body = await _get_json(http, _MEXC_TICKER_URL, {"symbol": f"{base}_{quote}"})
@@ -112,7 +140,7 @@ async def _price_mexc(http: aiohttp.ClientSession, symbol: str) -> Optional[Deci
 # spot listing at all, so a spot-only lookup would wrongly call them
 # "not found". Each remaining exchange is a genuine fallback, not a
 # duplicate - different exchanges list different coins.
-_PROVIDERS = [_price_binance_futures, _price_binance_spot, _price_bybit, _price_mexc]
+_PROVIDERS = [_price_binance_futures, _price_binance_spot, _price_bybit, _price_mexc, _price_coingecko]
 
 
 async def get_price(symbol: str) -> Decimal:
